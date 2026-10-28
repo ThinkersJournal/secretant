@@ -1,0 +1,8 @@
+[package]
+name = "secretant"
+version = "0.0.0"
+edition = "2024"
+description = "Placeholder: SecretAnt, secrets handling. Not yet released."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ThinkersJournal/secretant"
+readme = "README.md"
