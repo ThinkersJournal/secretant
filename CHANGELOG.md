@@ -2,7 +2,7 @@
 
 ## [0.0.4]
 
-- Unlock wraps (ROADMAP row 2): a recovery wrap (the recovery text is shown once and never stored readable), Windows DPAPI OS-bound wrap (unattended open as the same user; other systems get a named error), `Unlock` and `FileStore::open_with`. Several wraps open the same store; losing one still opens via another. Store file is owner-only (`0600` on Unix, ACL reduced to the current user on Windows). Not published.
+- Row 2: two more ways to open the store, a recovery text shown once (never stored readable) and the Windows user account (other systems get a named error). Any one opens the store; losing one still leaves another. The store file is readable by its owner only. Not published.
 
 ## [0.0.3]
 
