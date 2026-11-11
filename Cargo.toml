@@ -1,6 +1,6 @@
 [package]
 name = "secretant"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 description = "Placeholder: SecretAnt, secrets handling. Not yet released."
 license = "MIT OR Apache-2.0"
@@ -8,8 +8,13 @@ repository = "https://github.com/ThinkersJournal/secretant"
 readme = "README.md"
 
 [dependencies]
+argon2 = "0.6.0"
+chacha20poly1305 = "0.11.0"
+getrandom = "0.4.3"
 redactant = "0.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 zeroize = "1.9.1"
 
 [dev-dependencies]
-serde = "1.0.229"
+tempfile = "3.27.0"
