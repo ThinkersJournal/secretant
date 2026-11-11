@@ -45,6 +45,11 @@ pub enum StoreError {
     Corrupt,
     /// The file declares a format this version does not read.
     UnsupportedFormat,
+    /// The recovery key did not open the store (or is not a recovery key).
+    WrongRecoveryKey,
+    /// The OS-bound wrap did not open the store: none present, a different
+    /// user or machine, or this platform has no such wrap.
+    OsWrapFailed,
     /// `create` found a file already there.
     AlreadyExists,
     /// `open` found no file.
@@ -62,6 +67,10 @@ impl fmt::Display for StoreError {
             StoreError::WrongPassphrase => "the passphrase did not open the store",
             StoreError::Corrupt => "the store file is damaged or was altered",
             StoreError::UnsupportedFormat => "the store file has a format this version cannot read",
+            StoreError::WrongRecoveryKey => "the recovery key did not open the store",
+            StoreError::OsWrapFailed => {
+                "the operating system could not open the store for this user"
+            }
             StoreError::AlreadyExists => "a store already exists at that path",
             StoreError::NoSuchStore => "no store at that path",
             StoreError::BadName => "the name is empty or contains a control character",
@@ -204,11 +213,17 @@ struct Contents {
 
 // ---- file (what is on disk) ----
 
-#[derive(Serialize, Deserialize)]
+/// One way to unlock the data key. `kind` is "passphrase" (Argon2id key seals the
+/// data key), "recovery" (a random 256-bit key seals it) or "os-dpapi" (Windows
+/// DPAPI seals it for this user; `wrapped` is the DPAPI blob).
+#[derive(Clone, Serialize, Deserialize)]
 struct Wrap {
     kind: String,
+    #[serde(default)]
     salt: String,
-    kdf: KdfParams,
+    #[serde(default)]
+    kdf: Option<KdfParams>,
+    #[serde(default)]
     nonce: String,
     wrapped: String,
 }
@@ -254,6 +269,113 @@ fn unseal(key: &[u8], nonce: &[u8], aad: &[u8], sealed: &[u8]) -> Option<Zeroizi
     c.decrypt(&n, Payload { msg: sealed, aad })
         .ok()
         .map(Zeroizing::new)
+}
+
+/// What opens a store.
+pub enum Unlock<'a> {
+    /// The person's passphrase.
+    Passphrase(&'a SecretValue),
+    /// The recovery key text shown once at creation.
+    Recovery(&'a SecretValue),
+    /// The operating system, as the same user on the same machine (Windows DPAPI).
+    Os,
+}
+
+impl Unlock<'_> {
+    fn failure(&self) -> StoreError {
+        match self {
+            Unlock::Passphrase(_) => StoreError::WrongPassphrase,
+            Unlock::Recovery(_) => StoreError::WrongRecoveryKey,
+            Unlock::Os => StoreError::OsWrapFailed,
+        }
+    }
+}
+
+fn data_key_from(k: &[u8]) -> Option<Zeroizing<[u8; KEY_LEN]>> {
+    if k.len() != KEY_LEN {
+        return None;
+    }
+    let mut arr = Zeroizing::new([0u8; KEY_LEN]);
+    arr.copy_from_slice(k);
+    Some(arr)
+}
+
+/// Try one wrap with the offered unlock. `Ok(None)` means "not this wrap, or the
+/// key did not fit"; `Err` means the file itself is damaged.
+fn try_wrap(w: &Wrap, unlock: &Unlock<'_>) -> Result<Option<Zeroizing<[u8; KEY_LEN]>>, StoreError> {
+    match (w.kind.as_str(), unlock) {
+        ("passphrase", Unlock::Passphrase(pass)) => {
+            let Some(kdf) = w.kdf.filter(KdfParams::acceptable) else {
+                return Ok(None);
+            };
+            let (Some(salt), Some(nonce), Some(wrapped)) =
+                (from_hex(&w.salt), from_hex(&w.nonce), from_hex(&w.wrapped))
+            else {
+                return Err(StoreError::Corrupt);
+            };
+            let wk = derive(pass, &salt, &kdf)?;
+            Ok(unseal(wk.as_ref(), &nonce, AAD_WRAP, &wrapped).and_then(|k| data_key_from(&k)))
+        }
+        ("recovery", Unlock::Recovery(text)) => {
+            let Some(key) = parse_recovery(text) else {
+                return Ok(None);
+            };
+            let (Some(nonce), Some(wrapped)) = (from_hex(&w.nonce), from_hex(&w.wrapped)) else {
+                return Err(StoreError::Corrupt);
+            };
+            Ok(unseal(key.as_ref(), &nonce, AAD_WRAP, &wrapped).and_then(|k| data_key_from(&k)))
+        }
+        ("os-dpapi", Unlock::Os) => {
+            let Some(blob) = from_hex(&w.wrapped) else {
+                return Err(StoreError::Corrupt);
+            };
+            Ok(os::unprotect(&blob).and_then(|k| data_key_from(&k)))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Recovery key text: 64 hex digits in groups of 8 joined by `-`.
+fn format_recovery(key: &[u8]) -> String {
+    to_hex(key)
+        .as_bytes()
+        .chunks(8)
+        .map(|c| std::str::from_utf8(c).unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn parse_recovery(text: &SecretValue) -> Option<Zeroizing<Vec<u8>>> {
+    let raw = std::str::from_utf8(text.expose()).ok()?;
+    let compact: Zeroizing<String> = Zeroizing::new(
+        raw.chars()
+            .filter(|c| !c.is_whitespace() && *c != '-')
+            .map(|c| c.to_ascii_lowercase())
+            .collect(),
+    );
+    from_hex(&compact)
+        .filter(|k| k.len() == KEY_LEN)
+        .map(Zeroizing::new)
+}
+
+/// Create a file only its owner can read: `0600` on Unix; on Windows the ACL is
+/// reduced to the current user right after creation (see `os::restrict`).
+fn create_private(path: &Path) -> Result<fs::File, StoreError> {
+    #[cfg(unix)]
+    let f = {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+    };
+    #[cfg(not(unix))]
+    let f = fs::File::create(path);
+    let f = f.map_err(|_| StoreError::Io)?;
+    os::restrict(path)?;
+    Ok(f)
 }
 
 fn now_unix() -> u64 {
@@ -313,7 +435,7 @@ impl FileStore {
         let wrap = Wrap {
             kind: "passphrase".into(),
             salt: to_hex(&salt),
-            kdf,
+            kdf: Some(kdf),
             nonce: to_hex(&nonce),
             wrapped: to_hex(&wrapped),
         };
@@ -327,8 +449,14 @@ impl FileStore {
         Ok(store)
     }
 
-    /// Open an existing store.
+    /// Open an existing store with its passphrase.
     pub fn open(path: impl AsRef<Path>, passphrase: &SecretValue) -> Result<Self, StoreError> {
+        Self::open_with(path, Unlock::Passphrase(passphrase))
+    }
+
+    /// Open an existing store with any one of its wraps. Several wraps open the
+    /// same data key, so losing one does not lose the store.
+    pub fn open_with(path: impl AsRef<Path>, unlock: Unlock<'_>) -> Result<Self, StoreError> {
         let path = path.as_ref().to_path_buf();
         let bytes = match fs::read(&path) {
             Ok(b) => b,
@@ -343,25 +471,12 @@ impl FileStore {
         }
         let mut data_key: Option<Zeroizing<[u8; KEY_LEN]>> = None;
         for w in &image.wraps {
-            if w.kind != "passphrase" || !w.kdf.acceptable() {
-                continue;
-            }
-            let (Some(salt), Some(nonce), Some(wrapped)) =
-                (from_hex(&w.salt), from_hex(&w.nonce), from_hex(&w.wrapped))
-            else {
-                return Err(StoreError::Corrupt);
-            };
-            let wk = derive(passphrase, &salt, &w.kdf)?;
-            if let Some(k) = unseal(wk.as_ref(), &nonce, AAD_WRAP, &wrapped)
-                && k.len() == KEY_LEN
-            {
-                let mut arr = Zeroizing::new([0u8; KEY_LEN]);
-                arr.copy_from_slice(&k);
-                data_key = Some(arr);
+            if let Some(k) = try_wrap(w, &unlock)? {
+                data_key = Some(k);
                 break;
             }
         }
-        let data_key = data_key.ok_or(StoreError::WrongPassphrase)?;
+        let data_key = data_key.ok_or(unlock.failure())?;
         let (Some(nonce), Some(sealed)) = (from_hex(&image.nonce), from_hex(&image.ciphertext))
         else {
             return Err(StoreError::Corrupt);
@@ -377,6 +492,53 @@ impl FileStore {
         })
     }
 
+    /// Add a recovery wrap and return the recovery key, to be shown to the person
+    /// once ("write this down"). It is not stored anywhere in readable form:
+    /// whoever holds it holds the store.
+    pub fn add_recovery_wrap(&mut self) -> Result<SecretValue, StoreError> {
+        let key = Zeroizing::new(random::<KEY_LEN>()?);
+        let nonce = random::<NONCE_LEN>()?;
+        let wrapped = seal(key.as_ref(), &nonce, AAD_WRAP, self.data_key.as_ref())?;
+        let text = format_recovery(key.as_ref());
+        self.push_wrap(Wrap {
+            kind: "recovery".into(),
+            salt: String::new(),
+            kdf: None,
+            nonce: to_hex(&nonce),
+            wrapped: to_hex(&wrapped),
+        })?;
+        Ok(SecretValue::from_string(text))
+    }
+
+    /// Add an OS-bound wrap so this user, on this machine, opens the store with
+    /// no password (an unattended program). Windows only for now; other systems
+    /// get `OsWrapFailed`. Any process running as the same user can ask: that is
+    /// the stated limit of this wrap.
+    pub fn add_os_wrap(&mut self) -> Result<(), StoreError> {
+        let blob = os::protect(self.data_key.as_ref()).ok_or(StoreError::OsWrapFailed)?;
+        self.push_wrap(Wrap {
+            kind: "os-dpapi".into(),
+            salt: String::new(),
+            kdf: None,
+            nonce: String::new(),
+            wrapped: to_hex(&blob),
+        })
+    }
+
+    /// Which kinds of wrap the file has (not secret).
+    pub fn wrap_kinds(&self) -> Vec<String> {
+        self.wraps.iter().map(|w| w.kind.clone()).collect()
+    }
+
+    fn push_wrap(&mut self, w: Wrap) -> Result<(), StoreError> {
+        self.wraps.push(w);
+        if let Err(e) = self.save() {
+            self.wraps.pop();
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Write the whole store: new file beside the old one, flushed, then renamed
     /// into place, keeping the previous generation as `<path>.prev`.
     fn save(&self) -> Result<(), StoreError> {
@@ -384,18 +546,7 @@ impl FileStore {
         let plain =
             Zeroizing::new(serde_json::to_vec(&self.payload).map_err(|_| StoreError::Corrupt)?);
         let sealed = seal(self.data_key.as_ref(), &nonce, AAD_DATA, &plain)?;
-        // Wraps are copied field by field: `Wrap` is not Clone on purpose.
-        let wraps = self
-            .wraps
-            .iter()
-            .map(|w| Wrap {
-                kind: w.kind.clone(),
-                salt: w.salt.clone(),
-                kdf: w.kdf,
-                nonce: w.nonce.clone(),
-                wrapped: w.wrapped.clone(),
-            })
-            .collect();
+        let wraps = self.wraps.clone();
         let image = FileImage {
             format: FORMAT,
             wraps,
@@ -405,7 +556,7 @@ impl FileStore {
         let text = serde_json::to_vec_pretty(&image).map_err(|_| StoreError::Corrupt)?;
         let tmp = sibling(&self.path, "tmp");
         let prev = sibling(&self.path, "prev");
-        let mut f = fs::File::create(&tmp).map_err(|_| StoreError::Io)?;
+        let mut f = create_private(&tmp)?;
         f.write_all(&text).map_err(|_| StoreError::Io)?;
         f.sync_all().map_err(|_| StoreError::Io)?;
         drop(f);
@@ -428,6 +579,127 @@ fn sibling(path: &Path, ext: &str) -> PathBuf {
     s.push(".");
     s.push(ext);
     PathBuf::from(s)
+}
+
+/// Platform-bound pieces: DPAPI and the owner-only ACL.
+mod os {
+    use super::StoreError;
+    use std::path::Path;
+
+    #[cfg(windows)]
+    const ENTROPY: &[u8] = b"secretant-1-os-wrap";
+
+    #[cfg(windows)]
+    pub fn protect(data: &[u8]) -> Option<Vec<u8>> {
+        use windows_sys::Win32::Foundation::LocalFree;
+        use windows_sys::Win32::Security::Cryptography::{
+            CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData,
+        };
+        let input = CRYPT_INTEGER_BLOB {
+            cbData: data.len() as u32,
+            pbData: data.as_ptr() as *mut u8,
+        };
+        let ent = CRYPT_INTEGER_BLOB {
+            cbData: ENTROPY.len() as u32,
+            pbData: ENTROPY.as_ptr() as *mut u8,
+        };
+        let mut out = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        // SAFETY: pointers are valid for the call; DPAPI allocates `out`, which is
+        // copied and freed below.
+        unsafe {
+            if CryptProtectData(
+                &input,
+                std::ptr::null(),
+                &ent,
+                std::ptr::null(),
+                std::ptr::null(),
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut out,
+            ) == 0
+            {
+                return None;
+            }
+            let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+            LocalFree(out.pbData as _);
+            Some(v)
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn unprotect(blob: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+        use windows_sys::Win32::Foundation::LocalFree;
+        use windows_sys::Win32::Security::Cryptography::{
+            CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
+        };
+        let input = CRYPT_INTEGER_BLOB {
+            cbData: blob.len() as u32,
+            pbData: blob.as_ptr() as *mut u8,
+        };
+        let ent = CRYPT_INTEGER_BLOB {
+            cbData: ENTROPY.len() as u32,
+            pbData: ENTROPY.as_ptr() as *mut u8,
+        };
+        let mut out = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        // SAFETY: as in `protect`; the plaintext buffer is wiped before it is freed.
+        unsafe {
+            if CryptUnprotectData(
+                &input,
+                std::ptr::null_mut(),
+                &ent,
+                std::ptr::null(),
+                std::ptr::null(),
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut out,
+            ) == 0
+            {
+                return None;
+            }
+            let slice = std::slice::from_raw_parts_mut(out.pbData, out.cbData as usize);
+            let v = zeroize::Zeroizing::new(slice.to_vec());
+            zeroize::Zeroize::zeroize(slice);
+            LocalFree(out.pbData as _);
+            Some(v)
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn protect(_data: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+
+    #[cfg(not(windows))]
+    pub fn unprotect(_blob: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+        None
+    }
+
+    /// Windows: remove inherited access and grant only the current user.
+    #[cfg(windows)]
+    pub fn restrict(path: &Path) -> Result<(), StoreError> {
+        let user = std::env::var("USERNAME").map_err(|_| StoreError::Io)?;
+        let who = match std::env::var("USERDOMAIN") {
+            Ok(d) if !d.is_empty() => format!("{d}\\{user}"),
+            _ => user,
+        };
+        let ok = std::process::Command::new("icacls")
+            .arg(path)
+            .args(["/inheritance:r", "/grant:r"])
+            .arg(format!("{who}:(F)"))
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok { Ok(()) } else { Err(StoreError::Io) }
+    }
+
+    #[cfg(not(windows))]
+    pub fn restrict(_path: &Path) -> Result<(), StoreError> {
+        Ok(()) // created 0600 already
+    }
 }
 
 impl Store for FileStore {
@@ -713,7 +985,7 @@ mod tests {
         let good = fs::read_to_string(&path).unwrap();
         let image: FileImage = serde_json::from_str(&good).unwrap();
         let bad = good.replacen(
-            &format!("\"m_kib\": {}", image.wraps[0].kdf.m_kib),
+            &format!("\"m_kib\": {}", image.wraps[0].kdf.unwrap().m_kib),
             "\"m_kib\": 4000000000",
             1,
         );
@@ -783,5 +1055,216 @@ mod tests {
             .unwrap()
             .nonce;
         assert_ne!(n1, n2);
+    }
+
+    fn drop_wraps_except(path: &Path, keep: &str) {
+        let mut image: FileImage = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        image.wraps.retain(|w| w.kind == keep);
+        assert_eq!(image.wraps.len(), 1, "exactly one wrap kept");
+        fs::write(path, serde_json::to_vec(&image).unwrap()).unwrap();
+    }
+
+    fn other_recovery_key() -> SecretValue {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = FileStore::create_with_params(dir.path().join("o"), &pass("x"), FAST).unwrap();
+        s.add_recovery_wrap().unwrap()
+    }
+
+    #[test]
+    fn recovery_key_opens_and_is_not_in_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put("A", SecretValue::from_string("v".into()), BTreeMap::new())
+            .unwrap();
+        let key = s.add_recovery_wrap().unwrap();
+        assert!(format!("{key:?}").contains("redacted"));
+        drop(s);
+        let bytes = fs::read(&path).unwrap();
+        assert!(!contains(&bytes, key.expose()));
+        let compact: Vec<u8> = key
+            .expose()
+            .iter()
+            .copied()
+            .filter(|b| *b != b'-')
+            .collect();
+        assert!(!contains(&bytes, &compact));
+        let s = FileStore::open_with(&path, Unlock::Recovery(&key)).unwrap();
+        assert!(s.get("A").unwrap().expose() == b"v");
+        // Pasted with spaces and capitals still works.
+        let loose = SecretValue::from_string(
+            std::str::from_utf8(key.expose())
+                .unwrap()
+                .replace('-', " ")
+                .to_uppercase(),
+        );
+        assert!(FileStore::open_with(&path, Unlock::Recovery(&loose)).is_ok());
+    }
+
+    #[test]
+    fn wrong_recovery_key_is_a_named_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        let key = s.add_recovery_wrap().unwrap();
+        let other = other_recovery_key();
+        assert_ne!(key.expose(), other.expose());
+        for bad in [other, pass("short"), pass("")] {
+            assert_eq!(
+                FileStore::open_with(&path, Unlock::Recovery(&bad)).err(),
+                Some(StoreError::WrongRecoveryKey)
+            );
+        }
+    }
+
+    #[test]
+    fn losing_one_wrap_still_opens_through_another() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put("A", SecretValue::from_string("v".into()), BTreeMap::new())
+            .unwrap();
+        let key = s.add_recovery_wrap().unwrap();
+        drop(s);
+        assert_eq!(
+            FileStore::open(&path, &pass("pw")).unwrap().wrap_kinds(),
+            vec!["passphrase".to_string(), "recovery".to_string()]
+        );
+        // Lose the passphrase wrap: the recovery key still opens it.
+        let backup = fs::read(&path).unwrap();
+        drop_wraps_except(&path, "recovery");
+        assert_eq!(
+            FileStore::open(&path, &pass("pw")).err(),
+            Some(StoreError::WrongPassphrase)
+        );
+        assert!(FileStore::open_with(&path, Unlock::Recovery(&key)).is_ok());
+        // Lose the recovery wrap: the passphrase still opens it.
+        fs::write(&path, backup).unwrap();
+        drop_wraps_except(&path, "passphrase");
+        assert!(FileStore::open(&path, &pass("pw")).is_ok());
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Recovery(&key)).err(),
+            Some(StoreError::WrongRecoveryKey)
+        );
+    }
+
+    #[test]
+    fn no_wrap_that_opens_is_a_named_error_for_each_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        new_store(&dir); // passphrase wrap only
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Os).err(),
+            Some(StoreError::OsWrapFailed)
+        );
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Recovery(&pass("a"))).err(),
+            Some(StoreError::WrongRecoveryKey)
+        );
+    }
+
+    #[test]
+    fn adding_a_wrap_keeps_entries_and_the_same_data_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put("A", SecretValue::from_string("v".into()), BTreeMap::new())
+            .unwrap();
+        let before = s.data_key.to_vec();
+        s.add_recovery_wrap().unwrap();
+        assert_eq!(before, s.data_key.to_vec());
+        drop(s);
+        assert!(
+            FileStore::open(&path, &pass("pw"))
+                .unwrap()
+                .get("A")
+                .is_ok()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn os_wrap_opens_for_this_user_with_no_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put(
+            "A",
+            SecretValue::from_string(CANARY.into()),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        s.add_os_wrap().unwrap();
+        drop(s);
+        let bytes = fs::read(&path).unwrap();
+        assert!(!contains(&bytes, CANARY.as_bytes()));
+        let s = FileStore::open_with(&path, Unlock::Os).unwrap();
+        assert!(s.get("A").unwrap().expose() == CANARY.as_bytes());
+        // A damaged blob does not open.
+        let mut image: FileImage = serde_json::from_slice(&bytes).unwrap();
+        for w in image.wraps.iter_mut().filter(|w| w.kind == "os-dpapi") {
+            let mut b = from_hex(&w.wrapped).unwrap();
+            let last = b.len() - 1;
+            b[last] ^= 1;
+            w.wrapped = to_hex(&b);
+        }
+        fs::write(&path, serde_json::to_vec(&image).unwrap()).unwrap();
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Os).err(),
+            Some(StoreError::OsWrapFailed)
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn os_wrap_is_a_named_error_where_unsupported() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = new_store(&dir);
+        assert_eq!(s.add_os_wrap().err(), Some(StoreError::OsWrapFailed));
+        assert_eq!(s.wrap_kinds(), vec!["passphrase".to_string()]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn store_file_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put("A", SecretValue::from_string("v".into()), BTreeMap::new())
+            .unwrap();
+        for f in [path.clone(), sibling(&path, "prev")] {
+            assert_eq!(fs::metadata(f).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn store_file_acl_names_only_the_current_user() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put("A", SecretValue::from_string("v".into()), BTreeMap::new())
+            .unwrap();
+        let out = std::process::Command::new("icacls")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
+        let user = std::env::var("USERNAME").unwrap().to_lowercase();
+        let entries: Vec<&str> = text.lines().filter(|l| l.contains(":(")).collect();
+        assert!(!entries.is_empty(), "probe sees ACL entries");
+        for e in &entries {
+            assert!(e.contains(&user), "an ACL entry names someone else");
+        }
+        for wide in [
+            "everyone",
+            "builtin\\users",
+            "authenticated users",
+            "nt authority\\system",
+            "administrators",
+        ] {
+            assert!(!text.contains(wide), "ACL mentions {wide}");
+        }
     }
 }

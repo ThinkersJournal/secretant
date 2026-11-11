@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.4]
+
+- Key wraps (ROADMAP row 2): recovery-key wrap (256-bit, shown once, never stored readable), Windows DPAPI OS-bound wrap (unattended open as the same user; other systems get a named error), `Unlock` and `FileStore::open_with`. Several wraps open one data key; losing one still opens via another. Store file is owner-only (`0600` on Unix, ACL reduced to the current user on Windows). Not published.
+
 ## [0.0.3]
 
 - `Store` trait and `FileStore` (ROADMAP row 1, second slice): one JSON file; random data key, XChaCha20-Poly1305; the key wrapped by an Argon2id passphrase wrap (wrap list ready for more); put/get/get_version/list/describe with versions and non-secret metadata; atomic write keeping one previous generation (`.prev`); errors carry a class and no text. Canary tests (the leak mutation is caught), every flipped ciphertext byte fails, hostile KDF costs refused. Not published.
