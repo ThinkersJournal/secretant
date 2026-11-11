@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The `Store` trait and the local encrypted file store (`FileStore`).
 //!
 //! File format 1 (JSON, so a person can see what is in it and that nothing is
@@ -678,22 +679,47 @@ mod os {
         None
     }
 
-    /// Windows: remove inherited access and grant only the current user.
+    /// Windows: remove inherited access, grant the current user, then remove every
+    /// other principal that still holds an explicit entry (an administrator's
+    /// token adds its own defaults), and read the ACL back.
     #[cfg(windows)]
     pub fn restrict(path: &Path) -> Result<(), StoreError> {
+        use std::process::Command;
         let user = std::env::var("USERNAME").map_err(|_| StoreError::Io)?;
         let who = match std::env::var("USERDOMAIN") {
             Ok(d) if !d.is_empty() => format!("{d}\\{user}"),
-            _ => user,
+            _ => user.clone(),
         };
-        let ok = std::process::Command::new("icacls")
-            .arg(path)
-            .args(["/inheritance:r", "/grant:r"])
-            .arg(format!("{who}:(F)"))
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if ok { Ok(()) } else { Err(StoreError::Io) }
+        let run = |args: &[&std::ffi::OsStr]| {
+            Command::new("icacls")
+                .args(args)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+        };
+        let p = path.as_os_str();
+        let grant = std::ffi::OsString::from(format!("{who}:(F)"));
+        run(&[
+            p,
+            "/inheritance:r".as_ref(),
+            "/grant:r".as_ref(),
+            grant.as_os_str(),
+        ])
+        .ok_or(StoreError::Io)?;
+        let listing = run(&[p]).ok_or(StoreError::Io)?;
+        let text = String::from_utf8_lossy(&listing.stdout).into_owned();
+        let prefix = path.to_string_lossy().into_owned();
+        let me = user.to_lowercase();
+        for line in text.lines() {
+            let Some(end) = line.find(":(") else { continue };
+            let head = line[..end].trim();
+            let name = head.strip_prefix(prefix.as_str()).unwrap_or(head).trim();
+            if name.is_empty() || name.to_lowercase().ends_with(&me) {
+                continue;
+            }
+            run(&[p, "/remove:g".as_ref(), name.as_ref()]).ok_or(StoreError::Io)?;
+        }
+        Ok(())
     }
 
     #[cfg(not(windows))]
@@ -1255,7 +1281,7 @@ mod tests {
         let entries: Vec<&str> = text.lines().filter(|l| l.contains(":(")).collect();
         assert!(!entries.is_empty(), "probe sees ACL entries");
         for e in &entries {
-            assert!(e.contains(&user), "an ACL entry names someone else");
+            assert!(e.contains(&user), "an ACL entry names someone else: {text}");
         }
         for wide in [
             "everyone",

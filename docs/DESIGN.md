@@ -404,7 +404,7 @@ Per `PATENT-SWEEP-PROCESS.md` the sweep is a documented search and claim-by-clai
 9. `secret rotation "staged" "old version" "new version" overlap window deployment credentials`
 10. `"split" recovery key "threshold" "secret sharing" personal credential store backup`
 
-Also search the owner-names behind the products in section 10 (HashiCorp, Infisical, Doppler, 1Password) as assignees. Not legal advice; no attorney exists (repo `PATENT-SWEEP.md`).
+Also search the owner-names behind the products in section 10 (HashiCorp, Infisical, Doppler, 1Password) as assignees. Not legal advice; no attorney exists (repo `docs/PATENT-SWEEP.md`).
 
 ## 14. Decisions for CireSnave
 

@@ -12,4 +12,4 @@ Rewritten 2026-11-11 by the lane. Current state only; history is in git.
 2. Send [READY] after each slice; the PM gates and publishes. ConfigurAnt rows 4 and 25 and Humboldt wait on rows 1-3.
 
 ## Rules that bite
-Never print a secret value in tests/logs (compare booleans, hash or count). Crates.io deps only. Add PATENT-SWEEP.md rows for new techniques. Sonnet only. Never `gh auth switch`. Sign PR text `- lane: secretant`.
+Never print a secret value in tests/logs (compare booleans, hash or count). Crates.io deps only. Add docs/PATENT-SWEEP.md rows for new techniques. Sonnet only. Never `gh auth switch`. Sign PR text `- lane: secretant`.
