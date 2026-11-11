@@ -1,33 +1,15 @@
 # SecretAnt lane HANDOFF
 
-Written 2026-11-08 by the PM. Current state only; history is in git.
-
-## Why this lane exists (CireSnave, 2026-11-07)
-"Humboldt's installer is waiting on configurant. Configurant's secrets are waiting on secretant. We have no secretant lane."
-Chain: Humboldt installer (docs/INSTALLER-DESIGN.md) -> ConfigurAnt (rows 4 and 25: a `SecretSource` adapter crate for SecretAnt)
--> SecretAnt (a 0.0.0 placeholder on crates.io; design merged in #1, 452 lines, `docs/DESIGN.md`).
+Rewritten 2026-11-11 by the lane. Current state only; history is in git.
 
 ## State
-- Repo ThinkersJournal/secretant, main at 0.0.1 (design note only), CI and licences in place. No code. Your worktree: C:\Projects\secretant-wt-lane
-  on branch lane/secretant. The primary checkout C:\Projects\secretant stays on main; never switch it.
-- Requirements are CireSnave's verbatim words in DESIGN.md section 1 and 2 (every install sets up SecretAnt for the installer; a school's secrets
-  never live in a service we run). Do not weaken them.
+- Repo ThinkersJournal/secretant. Worktree C:\Projects\secretant-wt-lane on lane/secretant; primary checkout stays on main.
+- ROADMAP.md rows 1-6 are v1. Row 1 slice 1 (`SecretValue`, 0.0.2) merged. Slice 2 (`Store` trait, `FileStore` with passphrase wrap, 0.0.3) is in PR from this branch.
+- Row 1 proceeds on D3 A and D5 A (see ROADMAP). Requirements in DESIGN.md sections 1-2 are CireSnave's words; do not weaken.
 
-## First task (do not wait for a [TASK])
-1. Read `docs/DESIGN.md` whole, and ConfigurAnt's `docs/SECRET-SOURCES.md` on `origin/main` of ThinkersJournal/configurant (what its adapter needs).
-2. Write the build order as ROADMAP.md rows: the smallest v1 that lets ConfigurAnt publish its adapter and lets the Humboldt installer keep a
-   school's secrets in one place the school controls. Name what is NOT in v1. Each row: deliverable, test, what it unblocks, who is waiting.
-3. List every open decision in DESIGN.md (D1, D2, ... including D4 on the Humboldt Worker) with your recommendation, in full plain sentences, and
-   send the PM an [ASK] with only the ones that block row 1. The PM puts them on CireSnave's board; do not ask him yourself.
-4. Start row 1 (library core: `SecretValue` with no Debug/Display/Clone/Serialize and wiped on drop, store trait, file format, put/get/list)
-   red-first, one PR per slice, fragment-free repo: put the next version in the PR, the PM allocates at the gate.
+## Next
+1. After the slice-2 PR merges (check `gh pr view`), row 1 leftovers: private Redact stub behind a trait, `describe` polish; then row 2 (recovery-key and DPAPI wraps, owner-only ACL).
+2. Send [READY] after each slice; the PM gates and publishes. ConfigurAnt rows 4 and 25 and Humboldt wait on rows 1-3.
 
-## Rules that bite here
-- Secrets: a test or log must never print a value; settle any dispute by hash or count, never displayed text.
-- Crates.io versions only for cross-repo dependencies; claim nothing new (the name `secretant` is claimed).
-- Patent sweep: `PATENT-SWEEP.md` exists; add rows for any new technique before it ships.
-- Cost: Sonnet only; short messages; headers per MESSAGE-FORMATS.md.
-- Open an issue or PR as the lane account (ciresnave-bot). Never `gh auth switch`.
-
-## Waiting on
-Nothing. The PM gates and publishes; ConfigurAnt (rows 4 and 25) and Humboldt wait for you, so send [READY] after each slice.
+## Rules that bite
+Never print a secret value in tests/logs (compare booleans, hash or count). Crates.io deps only. Add PATENT-SWEEP.md rows for new techniques. Sonnet only. Never `gh auth switch`. Sign PR text `- lane: secretant`.
