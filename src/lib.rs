@@ -5,5 +5,5 @@
 mod store;
 mod value;
 
-pub use store::{EntryInfo, FileStore, KdfParams, Store, StoreError};
+pub use store::{EntryInfo, FileStore, KdfParams, Store, StoreError, Unlock};
 pub use value::SecretValue;
