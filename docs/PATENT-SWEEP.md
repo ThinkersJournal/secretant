@@ -1,5 +1,7 @@
 # Patent sweep
 
+Version 0.0.4: no sweep has been run; nothing in 0.0.x is released with functionality.
+
 Not legal advice; no attorney exists. A sweep (secret storage, key management, secret delivery) is a precondition of the first release that contains
 functionality. Nothing here is cleared. The full query list is in `docs/DESIGN.md` section 13.
 
