@@ -129,6 +129,12 @@ impl SecretReader {
         self.bounded(move |c| open_store(c)?.get(&name))
     }
 
+    /// Every name in the store, sorted. Names only: nothing in this call can
+    /// return a value (it never calls `get`), and each call reads the file afresh.
+    pub fn list(&self) -> Result<Vec<String>, ReadError> {
+        self.bounded(|c| Ok(open_store(c)?.list()))
+    }
+
     /// Run `job` on a worker thread and wait at most the timeout. A job that
     /// outlives the timeout is abandoned (it cannot be cancelled) and its result
     /// dropped when it finishes, which wipes any value it held.
@@ -196,6 +202,33 @@ mod tests {
         assert!(r.get(CANARY).unwrap().expose() == CANARY.as_bytes());
         assert_eq!(r.get("missing").err(), Some(ReadError::NotFound));
         assert_eq!(r.get("").err(), Some(ReadError::NotFound));
+    }
+
+    #[test]
+    fn list_returns_names_only_and_never_a_value() {
+        const VALUE: &str = "CANARY-list-value-61d0e8";
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = FileStore::create_with_params(&path, &pass("pw"), FAST).unwrap();
+        for n in ["b_name", "a_name"] {
+            s.put(n, SecretValue::from_string(VALUE.into()), BTreeMap::new())
+                .unwrap();
+        }
+        let r = SecretReader::open(cfg(
+            path.clone(),
+            ReadUnlock::Passphrase(pass("pw")),
+            10_000,
+        ))
+        .unwrap();
+        let names = r.list().unwrap();
+        assert_eq!(names, vec!["a_name".to_string(), "b_name".to_string()]);
+        // negative control: the value is in the store and get returns it
+        assert_eq!(r.get("a_name").unwrap().expose(), VALUE.as_bytes());
+        // but nothing list returned, in any formatting, holds it
+        assert!(!format!("{names:?} {names:#?}").contains(VALUE));
+        // wrong unlock: the same class as get, and no list
+        let bad = SecretReader::open(cfg(path, ReadUnlock::Passphrase(pass("bad")), 10_000));
+        assert_eq!(bad.err(), Some(ReadError::Denied));
     }
 
     #[test]
