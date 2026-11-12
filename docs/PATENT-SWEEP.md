@@ -1,6 +1,6 @@
 # Patent sweep
 
-Version line covered: the 0.1.0 candidate (`origin/main` 9404e56 plus open PRs #11 to #14: Cloudflare delivery, `SecretReader::list`, the no-echo prompt).
+Version line covered: the 0.1.0 candidate (`origin/main` f1ad488, which includes Cloudflare delivery and the backup library, plus open PRs #13 `SecretReader::list`, #14 the no-echo prompt and #16 the `cloudflare` feature gate).
 Date: 2026-11-12. Run by: the SecretAnt lane, Claude Sonnet 5.5. Method: AI-assisted web search, then a claim-by-claim read of the closest hits with
 `tools/patent-claims.py` (Google Patents' public pages). **Not legal advice; not a freedom-to-operate opinion; no attorney has reviewed it.** Nothing here
 clears the project. Read "Limitations" before relying on any line.
