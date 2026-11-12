@@ -86,6 +86,7 @@ impl From<StoreError> for ReadError {
             StoreError::Corrupt
             | StoreError::UnsupportedFormat
             | StoreError::AlreadyExists
+            | StoreError::Conflict
             | StoreError::NoSuchStore
             | StoreError::Io => ReadError::Unreachable,
         }
