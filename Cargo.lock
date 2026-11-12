@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "secretant"
-version = "0.0.17"
+version = "0.0.16"
 dependencies = [
  "argon2",
  "chacha20poly1305",
