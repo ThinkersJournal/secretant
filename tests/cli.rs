@@ -189,3 +189,42 @@ fn run_passes_the_childs_exit_code() {
     let o = r.cmd(&["run", NAME, "--", prog, a, b], "");
     assert_eq!(o.status.code(), Some(7));
 }
+
+#[test]
+fn deliver_plan_apply_verify_never_shows_a_value() {
+    let r = Run::new();
+    assert!(r.cmd(&["init"], "").status.success());
+    assert!(r.cmd(&["put", NAME], VALUE).status.success());
+    let dir = r._dir.path().to_path_buf();
+    let out_file = dir.join("out.secret");
+    let manifest = dir.join("m.json");
+    let body = serde_json::json!({"placements": [
+        {"name": NAME, "file": out_file},
+        {"name": NAME, "env_file": dir.join("app.env"), "var": "DB_URL"}
+    ]});
+    std::fs::write(&manifest, body.to_string()).unwrap();
+    let m = manifest.to_str().unwrap();
+
+    let plan = r.cmd(&["deliver", "plan", m], "");
+    assert!(plan.status.success());
+    assert!(text(&plan.stdout).contains("create"));
+    assert!(!out_file.exists(), "plan must write nothing");
+    no_canary(&plan);
+
+    let apply = r.cmd(&["deliver", "apply", m], "");
+    assert!(apply.status.success(), "{}", text(&apply.stderr));
+    no_canary(&apply);
+    assert_eq!(std::fs::read(&out_file).unwrap(), VALUE.as_bytes());
+
+    let ok = r.cmd(&["deliver", "verify", m], "");
+    assert!(ok.status.success());
+    assert!(text(&ok.stdout).contains("in-sync"));
+
+    // a hand edit is reported as drift, exit 1, and the report holds no value
+    std::fs::write(&out_file, b"hand edit").unwrap();
+    let drift = r.cmd(&["deliver", "verify", m], "");
+    assert_eq!(drift.status.code(), Some(1));
+    assert!(text(&drift.stdout).contains("drifted"));
+    no_canary(&drift);
+    assert!(!text(&drift.stdout).contains("hand edit"));
+}
