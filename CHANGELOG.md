@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.16] — Publish plan for 0.1.0 (docs)
+
+Adds `docs/PUBLISH-0.1.0.md`: what 0.1.0 contains and promises, the easy-gate, CI and protection, patent sweep, provenance and licences, name claim, consumer verification (ConfigurAnt adapter, WebHostAnt C7b), the unconfirmed live-Cloudflare limit, the order of ROADMAP rows 7 to 11 with blockers, and six decisions for the PM. Docs only; not published.
+
 ## [0.0.17] — SecretReader::list (names only)
 
 Adds `SecretReader::list`: every name in the store, sorted, for adapters that list (WebHostAnt C7b). Names only: the call never reads a value; it is bounded by the same timeout, reads the file afresh, and fails with the same classes as `get`. Additive. Test with a negative control (the value is in the store and `get` returns it, but nothing `list` returns holds it); a mutation that appends values to the names fails it. Not published.
