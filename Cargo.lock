@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "secretant"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -328,6 +328,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "windows-sys",
  "zeroize",
 ]
 

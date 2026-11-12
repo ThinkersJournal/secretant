@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! `SecretValue`: the only type a secret's content travels in.
 //!
 //! No `Display`, no `Clone`, no `Serialize`; `Debug` shows nothing; the bytes are
