@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.6]
+
+- Changelog fragments and version stamping adopted: later PRs add one `changelog.d/<topic>.md` fragment and no version edit (`tools/stamp-version.py`, `tools/check-fragment.py`, workflow `.github/workflows/changelog-fragment.yml`). Dry run lists `Cargo.toml`, `Cargo.lock` and `CHANGELOG.md`; a real stamp on a scratch copy leaves no old version in any `Cargo.toml` or `Cargo.lock`. Not published.
+
 ## [0.0.5]
 
 - Row 3: `SecretReader` for adapters. Open once with a config, then read by name. Failures are one of four classes (not found, denied, unreachable, timed out) and carry no store text. Every call is bounded by a timeout and nothing is cached: each read opens the file afresh. Not published.
