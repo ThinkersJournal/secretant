@@ -1,0 +1,5 @@
+# Per-commit fingerprints only (PM approval 2026-11-12). Each is a false positive: line 5 of CHANGELOG.md in
+# these two commits is a prose sentence describing the 0.0.3 store design. gitleaks 8.30.1 matched it with
+# entropy 3.73. No secret is present. Never a rule or path allow.
+6e944684ca91408834c7f0d8b8d317cd2076e35e:CHANGELOG.md:generic-api-key:5
+f1cc76b01a0e9afd3f1d00c95ba3dd3602fff4a1:CHANGELOG.md:generic-api-key:5
