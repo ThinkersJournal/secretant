@@ -1,6 +1,6 @@
 [package]
 name = "secretant"
-version = "0.0.7"
+version = "0.0.15"
 edition = "2024"
 description = "Placeholder: SecretAnt, secrets handling. Not yet released."
 license = "MIT OR Apache-2.0"
