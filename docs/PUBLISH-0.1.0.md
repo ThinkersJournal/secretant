@@ -95,7 +95,7 @@ Rows 7 and 8 are the useful ones for a school. Rows 10 and 9 move only when thei
 3. Hidden-prompt passphrase entry before 0.1.0 (no echo, no argv, no environment fallback by default): **done in #14**; the manual terminal check is the PM's (section 3).
 4. 0.1.0 waits for one live Cloudflare run by the PM, or ships with the limit stated if no token with the right scope exists: **open** (section 9).
 5. `portfolio` green or a recorded ruling per red at publish; the SEC-002 ruling is a CodeRipper-side waiver: **ruling to be recorded** (section 4).
-6. The lane runs the patent sweep and writes the claim readings; the PM reviews the independent claims; conservative, and says what was not searched: **done in #15**, with the delivery area flagged as least searched (section 5).
+6. The lane runs the patent sweep and writes the claim readings; the PM reviews the independent claims; conservative, and says what was not searched: **done in #15, widened for delivery (Keeper, HashiCorp) in its addendum; not complete.** The patent-database search (USPTO full text, Espacenet, WIPO; Keeper Security and HashiCorp/IBM; CPC H04L 9/08, G06F 21/62) is still undone: **if it is undone at publish it goes to CireSnave as a decision (whether to run it), not a silent gap** (PM, 2026-11-12) (section 5).
 
 Versions are the PM's to allocate; publishing is the PM's. The lane does not publish.
 
