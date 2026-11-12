@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.17] — SecretReader::list (names only)
+
+Adds `SecretReader::list`: every name in the store, sorted, for adapters that list (WebHostAnt C7b). Names only: the call never reads a value; it is bounded by the same timeout, reads the file afresh, and fails with the same classes as `get`. Additive. Test with a negative control (the value is in the store and `get` returns it, but nothing `list` returns holds it); a mutation that appends values to the names fails it. Not published.
+
 ## [0.0.15] — Row 5: delivery plan, apply and verify
 
 Deliver stored secrets to owner-only files and environment files (`src/deliver.rs`, `secretant deliver plan|apply|verify MANIFEST`). `plan` writes nothing; `apply` writes each target atomically and records which version went where in a ledger of names, paths and numbers; `verify` reports in-sync, stale (an older version we placed), drifted (hand edit), missing or loose permissions, and a report never holds a value. A failed target keeps its old content and stays stale. Tests: `src/deliver.rs` (7) and `tests/cli.rs`; two mutations (ledger written before the file, file created without owner-only permissions) each fail tests. Not published.
