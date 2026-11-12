@@ -38,13 +38,52 @@ jobs:
       - name: cargo build
         run: cargo build --locked --all-targets
 
-      - name: cargo test
+      - name: cargo test (default features: the store, no HTTP client)
         run: cargo test --locked --no-fail-fast
+
+      - name: cargo test (all features: adds Cloudflare delivery)
+        run: cargo test --locked --no-fail-fast --all-features
+
+      - name: cargo clippy (all features)
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: cargo doc
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --no-deps
+
+  # PM decision 2026-11-12: a store crate pulls no TLS stack unless the Cloudflare target is asked for. This job is the guard: the default
+  # build must not contain the HTTP client or any TLS crate, and `--features cloudflare` must (so the check is not vacuous).
+  default-build:
+    name: Default build has no HTTP or TLS stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+
+      - name: Default dependency tree
+        run: |
+          set -o pipefail
+          cargo tree --locked -e normal --prefix none | sed 's/ .*//' | sort -u > default-tree.txt
+          echo "default build: $(wc -l < default-tree.txt) packages"
+          banned='^(minreq|rustls|rustls-webpki|rustls-pki-types|webpki-roots|ring|aws-lc-rs|aws-lc-sys|native-tls|openssl|openssl-sys)$'
+          if grep -E "$banned" default-tree.txt; then
+            echo "::error::the default build contains an HTTP or TLS crate (listed above)"
+            exit 1
+          fi
+          echo "no HTTP or TLS crate in the default build"
+
+      - name: Negative control (the feature does bring them in)
+        run: |
+          set -o pipefail
+          cargo tree --locked -e normal --prefix none --features cloudflare | sed 's/ .*//' | sort -u > feature-tree.txt
+          echo "with cloudflare: $(wc -l < feature-tree.txt) packages"
+          grep -qx minreq feature-tree.txt
+          grep -qx rustls feature-tree.txt
 
   deny:
     name: cargo deny (advisories, licences, bans, sources)
