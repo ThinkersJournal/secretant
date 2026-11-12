@@ -10,7 +10,7 @@ functionality. Nothing here is cleared. The full query list is in `docs/DESIGN.m
 | Technique | Where | Status |
 |---|---|---|
 | One random data key held by several independent wraps (passphrase, recovery, OS-bound), so losing one does not lose the store | `src/store.rs` | not yet swept; DESIGN.md section 13 idea (ii); standard envelope encryption |
-| One personal store with versions and metadata driving delivery to host-native stores | not built (row 5) | not yet swept; idea (i) |
+| One personal store with versions and metadata driving delivery to host-native stores: a ledger of which version was placed where, so a later check tells an old copy (stale) from a hand edit (drift) without showing a value; each target written atomically so a failed one stays on the old value | `src/deliver.rs` (file and environment-file targets); host-native stores not built | not yet swept; idea (i) |
 
 ## Queries
 

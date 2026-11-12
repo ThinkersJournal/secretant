@@ -11,12 +11,19 @@
 //! - `run` puts each value in the child's environment only. The unlock secret
 //!   (`SECRETANT_PASSPHRASE`) is removed from the child's environment.
 //!
+//! `deliver` reads a manifest `{"placements":[{"name":"N","file":"PATH"},
+//! {"name":"N","env_file":"PATH","var":"VAR"}]}` and keeps its ledger in
+//! `MANIFEST.ledger.json`.
+//!
 //! Unlock: `--passphrase-stdin` (first line of standard input), `--recovery-stdin`
 //! (first line), `--os` (Windows user account), or, with none of these, the
 //! environment variable `SECRETANT_PASSPHRASE` if set, else `--os`.
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
-use secretant::{FileStore, SecretValue, Store, StoreError, Unlock};
+use secretant::{
+    Action, DeliverError, FileStore, Ledger, Placement, SecretValue, State, Store, StoreError,
+    Target, Unlock,
+};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -31,6 +38,8 @@ const USAGE: &str =
   get NAME [--version N]         print the value to stdout
   list                           print the names
   run NAME[,NAME] -- CMD ARGS    run CMD with each NAME as an environment variable
+  deliver plan|apply|verify MANIFEST   place values in files named by a JSON manifest;
+                                       prints names and states, never values
 ";
 
 /// Exit codes: 0 done, 1 refused or failed, 2 wrong usage.
@@ -305,6 +314,101 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
                 status.code().map_or(1, |c| u8::try_from(c).unwrap_or(1)),
             ))
         }
+        "deliver" => {
+            let [mode, manifest] = args.as_slice() else {
+                return Err(Fail::Usage);
+            };
+            let placements = read_manifest(manifest)?;
+            let s = open(&path, &how, &mut input)?;
+            let mut ledger_name = std::ffi::OsString::from(manifest);
+            ledger_name.push(".ledger.json");
+            let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;
+            let mut bad = false;
+            match mode.as_str() {
+                "plan" => {
+                    for (i, a) in secretant::plan(&s, &ledger, &placements) {
+                        let word = match a {
+                            Action::Create => "create",
+                            Action::Update => "update",
+                            Action::Unchanged => "unchanged",
+                        };
+                        println!("{} {word}", placements[i].name);
+                    }
+                }
+                "apply" => {
+                    for o in secretant::apply(&s, &mut ledger, &placements) {
+                        match o.result {
+                            Ok(v) => println!("{} placed version {v}", placements[o.index].name),
+                            Err(e) => {
+                                bad = true;
+                                println!("{} failed: {e}", placements[o.index].name);
+                            }
+                        }
+                    }
+                }
+                "verify" => {
+                    for (i, st) in secretant::verify(&s, &ledger, &placements) {
+                        let word = match st {
+                            State::InSync => "in-sync",
+                            State::Stale => "stale",
+                            State::Drifted => "drifted",
+                            State::Missing => "missing",
+                            State::LoosePerms => "loose-permissions",
+                            State::Unreadable => "unreadable",
+                        };
+                        bad |= st != State::InSync;
+                        println!("{} {word}", placements[i].name);
+                    }
+                }
+                _ => return Err(Fail::Usage),
+            }
+            Ok(if bad {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            })
+        }
         _ => Err(Fail::Usage),
     }
+}
+
+fn deliver_fail(e: DeliverError) -> Fail {
+    match e {
+        DeliverError::Store(s) => Fail::Store(s),
+        DeliverError::Io => Fail::Text("a target could not be read or written"),
+        DeliverError::Unsupported => Fail::Text("the value does not fit that kind of target"),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ManifestFile {
+    placements: Vec<ManifestEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct ManifestEntry {
+    name: String,
+    file: Option<PathBuf>,
+    env_file: Option<PathBuf>,
+    var: Option<String>,
+}
+
+fn read_manifest(path: &str) -> Result<Vec<Placement>, Fail> {
+    let bytes = std::fs::read(path).map_err(|_| Fail::Text("the manifest could not be read"))?;
+    let m: ManifestFile =
+        serde_json::from_slice(&bytes).map_err(|_| Fail::Text("the manifest is not valid"))?;
+    m.placements
+        .into_iter()
+        .map(|e| {
+            let target = match (e.file, e.env_file, e.var) {
+                (Some(p), None, None) => Target::File(p),
+                (None, Some(path), Some(var)) => Target::EnvFile { path, var },
+                _ => return Err(Fail::Text("the manifest is not valid")),
+            };
+            Ok(Placement {
+                name: e.name,
+                target,
+            })
+        })
+        .collect()
 }

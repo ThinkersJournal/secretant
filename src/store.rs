@@ -582,6 +582,30 @@ fn sibling(path: &Path, ext: &str) -> PathBuf {
     PathBuf::from(s)
 }
 
+/// Write `bytes` to `path` so only the owner can read it, atomically: a private
+/// temporary file beside it, flushed, then renamed over the target. A failure
+/// leaves the old file as it was.
+pub(crate) fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+    let tmp = sibling(path, "tmp");
+    let mut f = create_private(&tmp)?;
+    let done = f.write_all(bytes).and_then(|_| f.sync_all());
+    drop(f);
+    if done.is_err() {
+        let _ = fs::remove_file(&tmp);
+        return Err(StoreError::Io);
+    }
+    if fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return Err(StoreError::Io);
+    }
+    Ok(())
+}
+
+/// Is `path` readable by its owner only? `false` on any doubt.
+pub(crate) fn is_private(path: &Path) -> bool {
+    os::is_private(path)
+}
+
 /// Platform-bound pieces: DPAPI and the owner-only ACL.
 mod os {
     use super::StoreError;
@@ -679,6 +703,41 @@ mod os {
         None
     }
 
+    /// Windows: true when the ACL lists no principal but the current user.
+    #[cfg(windows)]
+    pub fn is_private(path: &Path) -> bool {
+        use std::process::Command;
+        let Ok(user) = std::env::var("USERNAME") else {
+            return false;
+        };
+        let Some(listing) = Command::new("icacls")
+            .arg(path)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+        else {
+            return false;
+        };
+        let text = String::from_utf8_lossy(&listing.stdout).into_owned();
+        let prefix = path.to_string_lossy().into_owned();
+        let me = user.to_lowercase();
+        let mut seen_me = false;
+        for line in text.lines() {
+            let Some(end) = line.find(":(") else { continue };
+            let head = line[..end].trim();
+            let name = head.strip_prefix(prefix.as_str()).unwrap_or(head).trim();
+            if name.is_empty() {
+                continue;
+            }
+            if name.to_lowercase().ends_with(&me) {
+                seen_me = true;
+            } else {
+                return false;
+            }
+        }
+        seen_me
+    }
+
     /// Windows: remove inherited access, grant the current user, then remove every
     /// other principal that still holds an explicit entry (an administrator's
     /// token adds its own defaults), and read the ACL back.
@@ -725,6 +784,20 @@ mod os {
     #[cfg(not(windows))]
     pub fn restrict(_path: &Path) -> Result<(), StoreError> {
         Ok(()) // created 0600 already
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_private(path: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::metadata(path).is_ok_and(|m| m.permissions().mode() & 0o077 == 0)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            false
+        }
     }
 }
 
