@@ -1,3 +1,0 @@
-kind: Row 4: the secretant command line
----
-The `secretant` program (`src/main.rs`): `init` (optional recovery key shown once, optional Windows account wrap), `put`, `rotate`, `get` (optionally one version), `list` and `run NAME[,NAME] -- command`. A value is read from standard input and is never an argument, `list` prints names only, errors name a class and nothing else, and `run` gives the child the values in its environment only and removes the unlock passphrase from it. Canary tests in `tests/cli.rs`; two mutations (the passphrase left in the child environment, `list` printing values) each fail a test. Not published.
