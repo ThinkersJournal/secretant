@@ -104,7 +104,7 @@ impl CloudflareWorker {
         self
     }
 
-    /// Bound each call.
+    /// Bound each call. The client counts whole seconds, so this rounds up to one.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
@@ -119,13 +119,9 @@ impl CloudflareWorker {
         )
     }
 
-    fn agent(&self) -> ureq::Agent {
-        ureq::Agent::new_with_config(
-            ureq::Agent::config_builder()
-                .timeout_global(Some(self.timeout))
-                .http_status_as_error(false)
-                .build(),
-        )
+    /// The per-call limit in whole seconds (at least one), as the client takes it.
+    fn secs(&self) -> u64 {
+        self.timeout.as_millis().div_ceil(1000).max(1) as u64
     }
 
     fn key(&self, var: &str) -> String {
@@ -136,13 +132,13 @@ impl CloudflareWorker {
     /// never returns a value.
     pub fn list(&self, token: &SecretValue) -> Result<Vec<String>, CloudflareError> {
         let auth = bearer(token)?;
-        let resp = self
-            .agent()
-            .get(&self.url("secrets"))
-            .header("Authorization", auth.as_str())
-            .call()
+        let resp = minreq::get(self.url("secrets"))
+            .with_header("Authorization", auth.as_str())
+            .with_timeout(self.secs())
+            .with_max_redirects(0)
+            .send()
             .map_err(classify)?;
-        let (status, body) = read(resp);
+        let (status, body) = read(&resp);
         check(status)?;
         let v: serde_json::Value =
             serde_json::from_str(&body).map_err(|_| CloudflareError::Rejected)?;
@@ -186,14 +182,16 @@ impl CloudflareWorker {
                 .map_err(|_| CloudflareError::Unsupported)?,
         );
         let auth = bearer(token)?;
-        let resp = self
-            .agent()
-            .patch(&self.url("secrets-bulk"))
-            .header("Authorization", auth.as_str())
-            .header("Content-Type", "application/json")
-            .send(&body[..])
+        // The client takes the body by value; its copy is not wiped (a stated limit).
+        let resp = minreq::patch(self.url("secrets-bulk"))
+            .with_header("Authorization", auth.as_str())
+            .with_header("Content-Type", "application/json")
+            .with_body(body.to_vec())
+            .with_timeout(self.secs())
+            .with_max_redirects(0)
+            .send()
             .map_err(classify)?;
-        let (status, text) = read(resp);
+        let (status, text) = read(&resp);
         check(status)?;
         let v: serde_json::Value =
             serde_json::from_str(&text).map_err(|_| CloudflareError::Rejected)?;
@@ -212,10 +210,9 @@ fn bearer(token: &SecretValue) -> Result<Zeroizing<String>, CloudflareError> {
     Ok(Zeroizing::new(format!("Bearer {t}")))
 }
 
-fn read(mut resp: ureq::http::Response<ureq::Body>) -> (u16, String) {
-    let status = resp.status().as_u16();
-    let body = resp.body_mut().read_to_string().unwrap_or_default();
-    (status, body)
+fn read(resp: &minreq::Response) -> (u16, String) {
+    let status = resp.status_code;
+    (status, resp.as_str().unwrap_or_default().to_string())
 }
 
 fn check(status: u16) -> Result<(), CloudflareError> {
@@ -228,9 +225,16 @@ fn check(status: u16) -> Result<(), CloudflareError> {
     }
 }
 
-fn classify(e: ureq::Error) -> CloudflareError {
+fn classify(e: minreq::Error) -> CloudflareError {
     match e {
-        ureq::Error::Timeout(_) => CloudflareError::TimedOut,
+        minreq::Error::IoError(io)
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+            ) =>
+        {
+            CloudflareError::TimedOut
+        }
         _ => CloudflareError::Unreachable,
     }
 }
