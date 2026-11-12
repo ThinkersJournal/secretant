@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.18] — **BREAKING**: the command line asks for the passphrase without echo
+
+The `secretant` command line no longer reads `SECRETANT_PASSPHRASE` by default. With no unlock option the passphrase is asked on the terminal with echo off (`init` asks twice and refuses a mismatch or an empty one; `put` and `rotate` also ask the value that way when standard input is a terminal). With no terminal there is no silent fallback: the error names the explicit options. `--passphrase-env` (the old variable, only when named) and `--passphrase-stdin`, `--recovery-stdin`, `--os` remain. The prompt goes to standard error and the answer is read from the terminal itself. Adds the `rpassword` dependency. Logic tested with a scripted terminal (`src/prompt.rs`) and the binary tests (no terminal and no option: refused, nothing created, the variable ignored; a mutation that restores the environment fallback fails it). Echo suppression itself is `rpassword`'s and is not asserted in CI. Not published.
+
 ## [0.0.16] — Publish plan for 0.1.0 (docs)
 
 Adds `docs/PUBLISH-0.1.0.md`: what 0.1.0 contains and promises, the easy-gate, CI and protection, patent sweep, provenance and licences, name claim, consumer verification (ConfigurAnt adapter, WebHostAnt C7b), the unconfirmed live-Cloudflare limit, the order of ROADMAP rows 7 to 11 with blockers, and six decisions for the PM. Docs only; not published.
