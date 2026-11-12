@@ -55,6 +55,8 @@ pub enum StoreError {
     AlreadyExists,
     /// `open` found no file.
     NoSuchStore,
+    /// An import would overwrite names already in the store and no choice was made.
+    Conflict,
     /// The name is empty or has a control character.
     BadName,
     /// The operating system refused a file operation.
@@ -74,6 +76,9 @@ impl fmt::Display for StoreError {
             }
             StoreError::AlreadyExists => "a store already exists at that path",
             StoreError::NoSuchStore => "no store at that path",
+            StoreError::Conflict => {
+                "the import would overwrite existing names; choose to keep or replace them"
+            }
             StoreError::BadName => "the name is empty or contains a control character",
             StoreError::Io => "a file operation failed",
         })
@@ -114,6 +119,48 @@ pub trait Store {
     fn list(&self) -> Vec<String>;
     /// Non-secret facts about `name`.
     fn describe(&self, name: &str) -> Result<EntryInfo, StoreError>;
+}
+
+/// What to do with a name that is in both the store and an import.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportConflict {
+    /// Stop before writing anything.
+    Refuse,
+    /// Leave the store's entry as it is.
+    Keep,
+    /// Add the bundle's latest value as a new version (nothing is deleted).
+    Replace,
+}
+
+/// One line of an import plan. A name, never a value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportItem {
+    /// The entry name.
+    pub name: String,
+    /// The store already has this name.
+    pub exists: bool,
+    /// How many versions the bundle holds for it.
+    pub versions: u32,
+}
+
+/// What an import did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ImportReport {
+    /// Names added with all their versions.
+    pub added: u32,
+    /// Names whose latest value was added as a new version.
+    pub replaced: u32,
+    /// Names left as they were.
+    pub kept: u32,
+}
+
+/// The plain, unencrypted header of a store file: no secret is in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inspection {
+    /// The file format number.
+    pub format: u32,
+    /// Each wrap's kind and, for a passphrase wrap, its Argon2id cost.
+    pub wraps: Vec<(String, Option<KdfParams>)>,
 }
 
 /// Argon2id cost parameters, recorded in the file so a later version can raise them.
@@ -529,6 +576,159 @@ impl FileStore {
     /// Which kinds of wrap the file has (not secret).
     pub fn wrap_kinds(&self) -> Vec<String> {
         self.wraps.iter().map(|w| w.kind.clone()).collect()
+    }
+
+    /// Read the unencrypted header of the store file at `path` without
+    /// unlocking it: the format and the wraps. Fails for a file that is not a
+    /// store of a format this version reads.
+    pub fn inspect(path: impl AsRef<Path>) -> Result<Inspection, StoreError> {
+        let bytes = match fs::read(path.as_ref()) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(StoreError::NoSuchStore);
+            }
+            Err(_) => return Err(StoreError::Io),
+        };
+        let image: FileImage = serde_json::from_slice(&bytes).map_err(|_| StoreError::Corrupt)?;
+        if image.format != FORMAT {
+            return Err(StoreError::UnsupportedFormat);
+        }
+        if from_hex(&image.nonce).is_none() || from_hex(&image.ciphertext).is_none() {
+            return Err(StoreError::Corrupt);
+        }
+        Ok(Inspection {
+            format: image.format,
+            wraps: image
+                .wraps
+                .iter()
+                .map(|w| (w.kind.clone(), w.kdf))
+                .collect(),
+        })
+    }
+
+    /// When version `version` of `name` was written, and its non-secret metadata.
+    pub fn version_info(
+        &self,
+        name: &str,
+        version: u32,
+    ) -> Result<(u64, BTreeMap<String, String>), StoreError> {
+        let v = self
+            .versions(name)?
+            .iter()
+            .find(|x| x.v == version)
+            .ok_or(StoreError::NotFound)?;
+        Ok((v.at, v.meta.clone()))
+    }
+
+    /// Copy every entry, every version and its metadata into `bundle`, which
+    /// must be empty (a store just created with the bundle's own passphrase).
+    /// The export bundle is a store file with one passphrase wrap: its format is
+    /// the store format, documented in `docs/DESIGN.md`.
+    pub fn export_to(&self, bundle: &mut FileStore) -> Result<(), StoreError> {
+        if !bundle.payload.entries.is_empty() {
+            return Err(StoreError::AlreadyExists);
+        }
+        for (name, list) in &self.payload.entries {
+            let copy = list
+                .iter()
+                .map(|v| Version {
+                    v: v.v,
+                    at: v.at,
+                    value: v.value.clone(),
+                    meta: v.meta.clone(),
+                })
+                .collect();
+            bundle.payload.entries.insert(name.clone(), copy);
+        }
+        bundle.save()
+    }
+
+    /// What importing `src` into this store would do. Reads, writes nothing.
+    pub fn plan_import(&self, src: &FileStore) -> Vec<ImportItem> {
+        src.payload
+            .entries
+            .iter()
+            .map(|(name, list)| ImportItem {
+                name: name.clone(),
+                exists: self.payload.entries.contains_key(name),
+                versions: u32::try_from(list.len()).unwrap_or(u32::MAX),
+            })
+            .collect()
+    }
+
+    /// Merge `src` into this store in memory and write once. New names come with
+    /// all their versions, numbers, times and metadata. A name already here is
+    /// refused, kept, or given the bundle's latest value as a NEW version,
+    /// according to `conflict`; nothing is ever deleted or overwritten. With
+    /// [`ImportConflict::Refuse`] and any conflict, nothing is written.
+    pub fn apply_import(
+        &mut self,
+        src: &FileStore,
+        conflict: ImportConflict,
+    ) -> Result<ImportReport, StoreError> {
+        if conflict == ImportConflict::Refuse
+            && src
+                .payload
+                .entries
+                .keys()
+                .any(|n| self.payload.entries.contains_key(n))
+        {
+            return Err(StoreError::Conflict);
+        }
+        let backup: BTreeMap<String, Vec<Version>> = self
+            .payload
+            .entries
+            .iter()
+            .map(|(n, l)| {
+                let copy = l
+                    .iter()
+                    .map(|v| Version {
+                        v: v.v,
+                        at: v.at,
+                        value: v.value.clone(),
+                        meta: v.meta.clone(),
+                    })
+                    .collect();
+                (n.clone(), copy)
+            })
+            .collect();
+        let mut report = ImportReport::default();
+        for (name, list) in &src.payload.entries {
+            check_name(name)?;
+            match self.payload.entries.get_mut(name) {
+                None => {
+                    let copy = list
+                        .iter()
+                        .map(|v| Version {
+                            v: v.v,
+                            at: v.at,
+                            value: v.value.clone(),
+                            meta: v.meta.clone(),
+                        })
+                        .collect();
+                    self.payload.entries.insert(name.clone(), copy);
+                    report.added += 1;
+                }
+                Some(_) if conflict == ImportConflict::Keep => report.kept += 1,
+                Some(mine) => {
+                    let Some(latest) = list.last() else { continue };
+                    let next = mine.last().map_or(1, |l| l.v + 1);
+                    mine.push(Version {
+                        v: next,
+                        at: now_unix(),
+                        value: latest.value.clone(),
+                        meta: latest.meta.clone(),
+                    });
+                    report.replaced += 1;
+                }
+            }
+        }
+        if let Err(e) = self.save() {
+            // Keep memory and disk the same.
+            self.payload.entries = backup;
+            return Err(e);
+        }
+        Ok(report)
     }
 
     fn push_wrap(&mut self, w: Wrap) -> Result<(), StoreError> {

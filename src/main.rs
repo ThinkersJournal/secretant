@@ -15,6 +15,10 @@
 //! {"name":"N","env_file":"PATH","var":"VAR"}]}` and keeps its ledger in
 //! `MANIFEST.ledger.json`.
 //!
+//! `cloudflare` reads `{"account_id":"A","script":"S","token":"STORE_NAME",
+//! "secrets":[{"name":"STORE_NAME","var":"WORKER_VAR"}]}`; the API token is a stored
+//! secret. Worker secrets are write-only, so `verify` says set, unset or stale.
+//!
 //! Unlock: by default the passphrase is asked on the terminal with no echo
 //! (`put` and `rotate` also ask the value that way when standard input is a
 //! terminal). With no terminal there is no silent fallback: choose
@@ -24,8 +28,8 @@
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
 use secretant::{
-    Action, DeliverError, FileStore, Ledger, Placement, SecretValue, State, Store, StoreError,
-    Target, Unlock,
+    Action, CloudflareError, CloudflareWorker, DeliverError, FileStore, Ledger, Placement,
+    SecretValue, State, Store, StoreError, Target, Unlock,
 };
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -45,6 +49,8 @@ const USAGE: &str =
   get NAME [--version N]         print the value to stdout
   list                           print the names
   run NAME[,NAME] -- CMD ARGS    run CMD with each NAME as an environment variable
+  cloudflare plan|apply|verify MANIFEST  set a Cloudflare Worker's secrets from the store;
+                                       prints names and states, never values
   deliver plan|apply|verify MANIFEST   place values in files named by a JSON manifest;
                                        prints names and states, never values
 ";
@@ -350,6 +356,69 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 status.code().map_or(1, |c| u8::try_from(c).unwrap_or(1)),
             ))
         }
+        "cloudflare" => {
+            let [mode, manifest] = args.as_slice() else {
+                return Err(Fail::Usage);
+            };
+            let (worker, token, mappings) = read_cf_manifest(manifest)?;
+            let s = open(&path, &how, &mut input, ask)?;
+            let mut ledger_name = std::ffi::OsString::from(manifest);
+            ledger_name.push(".ledger.json");
+            let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;
+            let cf_fail = |e: CloudflareError| match e {
+                CloudflareError::Store(s) => Fail::Store(s),
+                CloudflareError::Denied => Fail::Text("Cloudflare refused the token"),
+                CloudflareError::NotFound => Fail::Text("Cloudflare has no such account or Worker"),
+                CloudflareError::RateLimited => Fail::Text("Cloudflare rate-limited the request"),
+                CloudflareError::Unreachable => Fail::Text("Cloudflare could not be reached"),
+                CloudflareError::TimedOut => Fail::Text("the request to Cloudflare timed out"),
+                CloudflareError::Rejected => Fail::Text("Cloudflare answered with an error"),
+                CloudflareError::Unsupported => {
+                    Fail::Text("a name or value cannot be sent to a Worker")
+                }
+                CloudflareError::Ledger => Fail::Text("the delivery ledger could not be written"),
+            };
+            let mut bad = false;
+            match mode.as_str() {
+                "plan" => {
+                    for (i, a) in secretant::cf::plan(&s, &ledger, &worker, &token, &mappings)
+                        .map_err(cf_fail)?
+                    {
+                        let word = match a {
+                            Action::Create => "create",
+                            Action::Update => "update",
+                            Action::Unchanged => "unchanged",
+                        };
+                        println!("{} {word}", mappings[i].0);
+                    }
+                }
+                "apply" => {
+                    let n = secretant::cf::apply(&s, &mut ledger, &worker, &token, &mappings)
+                        .map_err(cf_fail)?;
+                    println!("sent {n} secret(s)");
+                }
+                "verify" => {
+                    for (i, st) in secretant::cf::verify(&s, &ledger, &worker, &token, &mappings)
+                        .map_err(cf_fail)?
+                    {
+                        let word = match st {
+                            State::InSync => "set",
+                            State::Stale => "stale",
+                            State::Missing => "unset",
+                            _ => "unknown",
+                        };
+                        bad |= st != State::InSync;
+                        println!("{} {word}", mappings[i].0);
+                    }
+                }
+                _ => return Err(Fail::Usage),
+            }
+            Ok(if bad {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            })
+        }
         "deliver" => {
             let [mode, manifest] = args.as_slice() else {
                 return Err(Fail::Usage);
@@ -447,4 +516,32 @@ fn read_manifest(path: &str) -> Result<Vec<Placement>, Fail> {
             })
         })
         .collect()
+}
+
+#[derive(serde::Deserialize)]
+struct CfManifest {
+    account_id: String,
+    script: String,
+    token: String,
+    secrets: Vec<CfEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct CfEntry {
+    name: String,
+    var: String,
+}
+
+type CfPlan = (CloudflareWorker, String, Vec<(String, String)>);
+
+fn read_cf_manifest(path: &str) -> Result<CfPlan, Fail> {
+    let bytes = std::fs::read(path).map_err(|_| Fail::Text("the manifest could not be read"))?;
+    let m: CfManifest =
+        serde_json::from_slice(&bytes).map_err(|_| Fail::Text("the manifest is not valid"))?;
+    let worker = CloudflareWorker::new(m.account_id, m.script);
+    Ok((
+        worker,
+        m.token,
+        m.secrets.into_iter().map(|e| (e.name, e.var)).collect(),
+    ))
 }
