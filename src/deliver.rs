@@ -158,26 +158,37 @@ impl Ledger {
     }
 
     fn version(&self, p: &Placement) -> Option<u32> {
-        let key = p.target.key();
+        self.version_by(&p.name, &p.target.key())
+    }
+
+    pub(crate) fn version_by(&self, name: &str, key: &str) -> Option<u32> {
         self.file
             .placed
             .iter()
-            .find(|r| r.name == p.name && r.target == key)
+            .find(|r| r.name == name && r.target == key)
             .map(|r| r.version)
     }
 
     fn record(&mut self, p: &Placement, version: u32) -> Result<(), DeliverError> {
-        let key = p.target.key();
+        self.record_by(&p.name, &p.target.key(), version)
+    }
+
+    pub(crate) fn record_by(
+        &mut self,
+        name: &str,
+        key: &str,
+        version: u32,
+    ) -> Result<(), DeliverError> {
         match self
             .file
             .placed
             .iter_mut()
-            .find(|r| r.name == p.name && r.target == key)
+            .find(|r| r.name == name && r.target == key)
         {
             Some(r) => r.version = version,
             None => self.file.placed.push(Record {
-                name: p.name.clone(),
-                target: key,
+                name: name.to_string(),
+                target: key.to_string(),
                 version,
             }),
         }
@@ -186,7 +197,7 @@ impl Ledger {
     }
 }
 
-fn valid_var(var: &str) -> bool {
+pub(crate) fn valid_var(var: &str) -> bool {
     !var.is_empty()
         && !var.starts_with(|c: char| c.is_ascii_digit())
         && var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
