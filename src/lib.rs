@@ -6,6 +6,7 @@
 #[cfg(feature = "cloudflare")]
 mod cloudflare;
 mod deliver;
+mod maintain;
 mod read;
 mod store;
 mod value;
@@ -20,6 +21,10 @@ pub mod cf {
 pub use deliver::{
     Action, DeliverError, Ledger, Outcome, Placement, State, Target, apply, plan, verify,
 };
+pub use maintain::{BackupSummary, Check, Finding, Level, backup, check_backup, doctor, restore};
 pub use read::{ReadConfig, ReadError, ReadUnlock, SecretReader};
-pub use store::{EntryInfo, FileStore, KdfParams, Store, StoreError, Unlock};
+pub use store::{
+    EntryInfo, FileStore, ImportConflict, ImportItem, ImportReport, Inspection, KdfParams, Store,
+    StoreError, Unlock,
+};
 pub use value::SecretValue;
