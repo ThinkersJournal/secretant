@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.20] — HTTP client behind a cargo feature (off by default)
+
+Cloudflare Worker delivery and its HTTP client (`minreq`, with the TLS stack under it) are now behind the cargo feature `cloudflare`, off by default: a consumer of the store pulls no HTTP or TLS crate (the default build is 44 packages in the normal dependency tree, none of `minreq`, `rustls`, `ring`, `aws-lc-*`, `webpki*`, `openssl`). `cargo install secretant --features cloudflare` (or `cargo build --features cloudflare`) adds `secretant::cf`, the `CloudflareWorker` types and the `secretant cloudflare` command; without the feature that command says so. CI: a new job (`Default build has no HTTP or TLS stack`) fails if the default tree contains any of those crates and checks the feature does bring them in (negative control); the build and test job now also tests and lints with all features. The Cloudflare tests require the feature. Not published.
+
 ## [0.0.19] — Patent sweep record (docs)
 
 `docs/PATENT-SWEEP.md` now holds the first patent sweep for the 0.1.0 candidate: seven ideas, eleven queries (general web search, not the patent databases), five patents read claim by claim (US10536272B2, US11502833B2, US11057210B1, US10148437B2, US12463959B2), all clear on the independent claims read, and a limitations section stating what was not searched. Delivery (ideas 3 to 5) is flagged as the least searched area. Not legal advice. Docs only; not published.

@@ -1,17 +1,23 @@
 [package]
 name = "secretant"
-version = "0.0.19"
+version = "0.0.20"
 edition = "2024"
 description = "Placeholder: SecretAnt, secrets handling. Not yet released."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ThinkersJournal/secretant"
 readme = "README.md"
 
+[features]
+# Off by default: a store consumer pulls no HTTP or TLS stack. `cloudflare` adds Cloudflare Worker secret delivery
+# (`secretant::cf`, `secretant cloudflare ...`) and its HTTP client.
+default = []
+cloudflare = ["dep:minreq"]
+
 [dependencies]
 argon2 = "0.6.0"
 chacha20poly1305 = "0.11.0"
 getrandom = "0.4.3"
-minreq = { version = "3.0.0", features = ["https-rustls"] }
+minreq = { version = "3.0.0", features = ["https-rustls"], optional = true }
 redactant = "0.1"
 rpassword = "7.5.5"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -24,3 +30,12 @@ tempfile = "3.27.0"
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_System_Memory"] }
+
+# The Cloudflare tests need the feature; without it the default build skips them.
+[[test]]
+name = "cloudflare"
+required-features = ["cloudflare"]
+
+[[test]]
+name = "cloudflare_logs"
+required-features = ["cloudflare"]
