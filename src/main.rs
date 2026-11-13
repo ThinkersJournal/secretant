@@ -19,9 +19,12 @@
 //! "secrets":[{"name":"STORE_NAME","var":"WORKER_VAR"}]}`; the API token is a stored
 //! secret. Worker secrets are write-only, so `verify` says set, unset or stale.
 //!
-//! Unlock: `--passphrase-stdin` (first line of standard input), `--recovery-stdin`
-//! (first line), `--os` (Windows user account), or, with none of these, the
-//! environment variable `SECRETANT_PASSPHRASE` if set, else `--os`.
+//! Unlock: by default the passphrase is asked on the terminal with no echo
+//! (`put` and `rotate` also ask the value that way when standard input is a
+//! terminal). With no terminal there is no silent fallback: choose
+//! `--passphrase-stdin` (first line of standard input), `--recovery-stdin`
+//! (first line), `--os` (Windows user account) or `--passphrase-env` (the
+//! variable `SECRETANT_PASSPHRASE`, only when asked for by name).
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
 use secretant::{
@@ -34,10 +37,14 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
+mod prompt;
+use prompt::{Ask, AskError, Terminal};
+
 const USAGE: &str =
-    "usage: secretant [--store PATH] [--passphrase-stdin | --recovery-stdin | --os] COMMAND
-  init [--recovery] [--add-os]   create a store (passphrase from stdin or SECRETANT_PASSPHRASE)
-  put NAME                       add a version; the value is read from stdin
+    "usage: secretant [--store PATH] [--passphrase-stdin | --recovery-stdin | --os | --passphrase-env] COMMAND
+  (no unlock option: the passphrase is asked on the terminal, no echo)
+  init [--recovery] [--add-os]   create a store (new passphrase asked twice on the terminal)
+  put NAME                       add a version; the value is asked (no echo) or read from stdin
   rotate NAME                    like put, but NAME must already exist
   get NAME [--version N]         print the value to stdout
   list                           print the names
@@ -58,7 +65,7 @@ fn main() -> ExitCode {
         Ok(a) => a,
         Err(_) => return usage(),
     };
-    match go(args) {
+    match go(args, &mut Terminal) {
         Ok(code) => code,
         Err(Fail::Usage) => usage(),
         Err(Fail::Store(e)) => {
@@ -93,7 +100,8 @@ enum How {
     Passphrase,
     Recovery,
     Os,
-    Auto,
+    Env,
+    Prompt,
 }
 
 /// Standard input, read in the order the command needs it.
@@ -150,7 +158,23 @@ fn default_store() -> Option<PathBuf> {
     base.map(|b| b.join("secretant").join("store.json"))
 }
 
-fn open(path: &PathBuf, how: &How, input: &mut Input) -> Result<FileStore, Fail> {
+fn ask_fail(e: AskError) -> Fail {
+    Fail::Text(match e {
+        AskError::NoTerminal => {
+            "no terminal to ask on: use --passphrase-stdin, --passphrase-env, --recovery-stdin or --os"
+        }
+        AskError::Failed => "the terminal could not be read",
+        AskError::Mismatch => "the two passphrases differ; nothing was created",
+        AskError::Empty => "an empty passphrase is not allowed; nothing was created",
+    })
+}
+
+fn open(
+    path: &PathBuf,
+    how: &How,
+    input: &mut Input,
+    ask: &mut dyn Ask,
+) -> Result<FileStore, Fail> {
     match how {
         How::Os => Ok(FileStore::open_with(path, Unlock::Os)?),
         How::Recovery => {
@@ -161,19 +185,22 @@ fn open(path: &PathBuf, how: &How, input: &mut Input) -> Result<FileStore, Fail>
             let p = input.line()?;
             Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
         }
-        How::Auto => match std::env::var("SECRETANT_PASSPHRASE") {
-            Ok(p) => {
-                let p = SecretValue::from_string(p);
-                Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
-            }
-            Err(_) => Ok(FileStore::open_with(path, Unlock::Os)?),
-        },
+        How::Env => {
+            let p = std::env::var("SECRETANT_PASSPHRASE")
+                .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?;
+            let p = SecretValue::from_string(p);
+            Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
+        }
+        How::Prompt => {
+            let p = prompt::passphrase(ask).map_err(ask_fail)?;
+            Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
+        }
     }
 }
 
-fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
+fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
     let mut store: Option<PathBuf> = None;
-    let mut how = How::Auto;
+    let mut how = How::Prompt;
     let mut i = 0;
     // Global options come first.
     while i < args.len() && args[i].starts_with("--") {
@@ -192,6 +219,10 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
             }
             "--os" => {
                 how = How::Os;
+                i += 1;
+            }
+            "--passphrase-env" => {
+                how = How::Env;
                 i += 1;
             }
             _ => return Err(Fail::Usage),
@@ -218,10 +249,11 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
             }
             let pass = match how {
                 How::Passphrase => input.line()?,
-                How::Auto => match std::env::var("SECRETANT_PASSPHRASE") {
-                    Ok(p) => SecretValue::from_string(p),
-                    Err(_) => return Err(Fail::Usage),
-                },
+                How::Env => SecretValue::from_string(
+                    std::env::var("SECRETANT_PASSPHRASE")
+                        .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?,
+                ),
+                How::Prompt => prompt::new_passphrase(ask).map_err(ask_fail)?,
                 _ => return Err(Fail::Usage),
             };
             if let Some(dir) = path.parent() {
@@ -247,11 +279,15 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
             let [name] = args.as_slice() else {
                 return Err(Fail::Usage);
             };
-            let mut s = open(&path, &how, &mut input)?;
+            let mut s = open(&path, &how, &mut input, ask)?;
             if cmd == "rotate" {
                 s.describe(name)?;
             }
-            let value = input.rest()?;
+            let value = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                ask.secret("Value: ").map_err(ask_fail)?
+            } else {
+                input.rest()?
+            };
             let v = s.put(name, value, BTreeMap::new())?;
             println!("version {v}");
             Ok(ExitCode::SUCCESS)
@@ -264,7 +300,7 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
                 }
                 _ => return Err(Fail::Usage),
             };
-            let s = open(&path, &how, &mut input)?;
+            let s = open(&path, &how, &mut input, ask)?;
             let value = match version {
                 Some(v) => s.get_version(name, v)?,
                 None => s.get(name)?,
@@ -278,7 +314,7 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
             if !args.is_empty() {
                 return Err(Fail::Usage);
             }
-            let s = open(&path, &how, &mut input)?;
+            let s = open(&path, &how, &mut input, ask)?;
             for n in s.list() {
                 println!("{n}");
             }
@@ -294,7 +330,7 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
             let Some((program, program_args)) = command.split_first() else {
                 return Err(Fail::Usage);
             };
-            let s = open(&path, &how, &mut input)?;
+            let s = open(&path, &how, &mut input, ask)?;
             let mut child = Command::new(program);
             child.args(program_args);
             child.env_remove("SECRETANT_PASSPHRASE");
@@ -325,7 +361,7 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
                 return Err(Fail::Usage);
             };
             let (worker, token, mappings) = read_cf_manifest(manifest)?;
-            let s = open(&path, &how, &mut input)?;
+            let s = open(&path, &how, &mut input, ask)?;
             let mut ledger_name = std::ffi::OsString::from(manifest);
             ledger_name.push(".ledger.json");
             let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;
@@ -388,7 +424,7 @@ fn go(mut args: Vec<String>) -> Result<ExitCode, Fail> {
                 return Err(Fail::Usage);
             };
             let placements = read_manifest(manifest)?;
-            let s = open(&path, &how, &mut input)?;
+            let s = open(&path, &how, &mut input, ask)?;
             let mut ledger_name = std::ffi::OsString::from(manifest);
             ledger_name.push(".ledger.json");
             let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;

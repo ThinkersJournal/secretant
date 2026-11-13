@@ -25,6 +25,7 @@ impl Run {
         let mut c = Command::new(env!("CARGO_BIN_EXE_secretant"));
         c.arg("--store")
             .arg(&self.store)
+            .arg("--passphrase-env")
             .args(args)
             .env("SECRETANT_PASSPHRASE", PASS)
             .stdin(Stdio::piped())
@@ -227,4 +228,96 @@ fn deliver_plan_apply_verify_never_shows_a_value() {
     assert!(text(&drift.stdout).contains("drifted"));
     no_canary(&drift);
     assert!(!text(&drift.stdout).contains("hand edit"));
+}
+
+#[test]
+fn with_no_terminal_and_no_option_nothing_is_read_from_the_environment() {
+    // Piped stdin is not a terminal. The passphrase variable is set, but it is
+    // used only when --passphrase-env is given.
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store.json");
+    let mut c = Command::new(env!("CARGO_BIN_EXE_secretant"));
+    c.arg("--store")
+        .arg(&store)
+        .arg("init")
+        .env("SECRETANT_PASSPHRASE", PASS)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(PASS.as_bytes())
+        .unwrap();
+    let o = child.wait_with_output().unwrap();
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "init must refuse with no terminal"
+    );
+    assert!(!store.exists(), "nothing may be created");
+    no_canary(&o);
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("--passphrase-stdin"),
+        "the error must say what to do: {err}"
+    );
+}
+
+#[test]
+fn passphrase_from_stdin_is_still_available_when_asked_for() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store.json");
+    let run = |args: &[&str], stdin: &str| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_secretant"));
+        c.arg("--store")
+            .arg(&store)
+            .arg("--passphrase-stdin")
+            .args(args)
+            .env_remove("SECRETANT_PASSPHRASE")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = c.spawn().unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(stdin.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+    assert!(
+        run(
+            &["init"],
+            &format!(
+                "{PASS}
+"
+            )
+        )
+        .status
+        .success()
+    );
+    // first line is the passphrase, the rest is the value
+    assert!(
+        run(
+            &["put", NAME],
+            &format!(
+                "{PASS}
+{VALUE}"
+            )
+        )
+        .status
+        .success()
+    );
+    let got = run(
+        &["get", NAME],
+        &format!(
+            "{PASS}
+"
+        ),
+    );
+    assert_eq!(text(&got.stdout), VALUE);
 }
