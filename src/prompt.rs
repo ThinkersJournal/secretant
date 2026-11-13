@@ -60,6 +60,24 @@ pub fn new_passphrase(ask: &mut dyn Ask) -> Result<SecretValue, AskError> {
     Ok(first)
 }
 
+/// The passphrase of an existing export bundle.
+pub fn bundle_passphrase(ask: &mut dyn Ask) -> Result<SecretValue, AskError> {
+    ask.secret("Bundle passphrase: ")
+}
+
+/// A new export bundle's passphrase, asked twice; refused if the two differ or it is empty.
+pub fn new_bundle_passphrase(ask: &mut dyn Ask) -> Result<SecretValue, AskError> {
+    let first = ask.secret("New bundle passphrase: ")?;
+    let second = ask.secret("Repeat bundle passphrase: ")?;
+    if first.expose() != second.expose() {
+        return Err(AskError::Mismatch);
+    }
+    if first.is_empty() {
+        return Err(AskError::Empty);
+    }
+    Ok(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

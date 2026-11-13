@@ -28,8 +28,8 @@
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
 use secretant::{
-    Action, CloudflareError, CloudflareWorker, DeliverError, FileStore, Ledger, Placement,
-    SecretValue, State, Store, StoreError, Target, Unlock,
+    Action, CloudflareError, CloudflareWorker, DeliverError, FileStore, ImportConflict, Ledger,
+    Level, Placement, SecretValue, State, Store, StoreError, Target, Unlock,
 };
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -49,6 +49,14 @@ const USAGE: &str =
   get NAME [--version N]         print the value to stdout
   list                           print the names
   run NAME[,NAME] -- CMD ARGS    run CMD with each NAME as an environment variable
+  backup DEST                    copy the store file (ciphertext) to DEST; needs no unlock
+  restore-test BACKUP            open BACKUP and decrypt every version; prints counts
+  restore BACKUP [--replace]     put BACKUP in place of the store (the old file is kept as .prev)
+  doctor [--header-only]         check the store file; --header-only skips unlocking
+  export BUNDLE [--bundle-passphrase-stdin]
+                                 write every entry to a new store file under its own passphrase
+  import BUNDLE [--apply] [--conflict keep|replace] [--bundle-passphrase-stdin]
+                                 show what an import would do; --apply does it (nothing is deleted)
   cloudflare plan|apply|verify MANIFEST  set a Cloudflare Worker's secrets from the store;
                                        prints names and states, never values
   deliver plan|apply|verify MANIFEST   place values in files named by a JSON manifest;
@@ -198,6 +206,55 @@ fn open(
     }
 }
 
+/// Run `f` with the unlock `how` names, without opening a store.
+fn with_unlock<T>(
+    how: &How,
+    input: &mut Input,
+    ask: &mut dyn Ask,
+    f: impl FnOnce(Unlock<'_>) -> Result<T, StoreError>,
+) -> Result<T, Fail> {
+    let r = match how {
+        How::Os => f(Unlock::Os),
+        How::Recovery => {
+            let k = input.line()?;
+            f(Unlock::Recovery(&k))
+        }
+        How::Passphrase => {
+            let p = input.line()?;
+            f(Unlock::Passphrase(&p))
+        }
+        How::Env => {
+            let p = std::env::var("SECRETANT_PASSPHRASE")
+                .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?;
+            let p = SecretValue::from_string(p);
+            f(Unlock::Passphrase(&p))
+        }
+        How::Prompt => {
+            let p = prompt::passphrase(ask).map_err(ask_fail)?;
+            f(Unlock::Passphrase(&p))
+        }
+    };
+    Ok(r?)
+}
+
+/// The passphrase of a bundle: asked on the terminal (twice when new), or the
+/// next line of standard input with `--bundle-passphrase-stdin`.
+fn bundle_passphrase(
+    from_stdin: bool,
+    new: bool,
+    input: &mut Input,
+    ask: &mut dyn Ask,
+) -> Result<SecretValue, Fail> {
+    if from_stdin {
+        return input.line();
+    }
+    if new {
+        prompt::new_bundle_passphrase(ask).map_err(ask_fail)
+    } else {
+        prompt::bundle_passphrase(ask).map_err(ask_fail)
+    }
+}
+
 fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
     let mut store: Option<PathBuf> = None;
     let mut how = How::Prompt;
@@ -317,6 +374,129 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             let s = open(&path, &how, &mut input, ask)?;
             for n in s.list() {
                 println!("{n}");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        "backup" => {
+            let [dest] = args.as_slice() else {
+                return Err(Fail::Usage);
+            };
+            secretant::backup(&path, std::path::Path::new(dest))?;
+            println!("backup written");
+            Ok(ExitCode::SUCCESS)
+        }
+        "restore-test" => {
+            let [backup] = args.as_slice() else {
+                return Err(Fail::Usage);
+            };
+            let sum = with_unlock(&how, &mut input, ask, |u| {
+                secretant::check_backup(std::path::Path::new(backup), u)
+            })?;
+            println!(
+                "backup opens: {} entries, {} versions",
+                sum.entries, sum.versions
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        "restore" => {
+            let (backup, replace) = match args.as_slice() {
+                [b] => (b, false),
+                [b, f] if f == "--replace" => (b, true),
+                _ => return Err(Fail::Usage),
+            };
+            let sum = with_unlock(&how, &mut input, ask, |u| {
+                secretant::restore(std::path::Path::new(backup), &path, u, replace)
+            })?;
+            println!(
+                "restored: {} entries, {} versions",
+                sum.entries, sum.versions
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        "doctor" => {
+            let header_only = match args.as_slice() {
+                [] => false,
+                [f] if f == "--header-only" => true,
+                _ => return Err(Fail::Usage),
+            };
+            let findings = if header_only {
+                secretant::doctor(&path, None)
+            } else {
+                with_unlock(&how, &mut input, ask, |u| {
+                    Ok(secretant::doctor(&path, Some(u)))
+                })?
+            };
+            let mut worst = Level::Info;
+            for f in &findings {
+                let tag = match f.level {
+                    Level::Info => "ok  ",
+                    Level::Warn => "warn",
+                    Level::Fail => "FAIL",
+                };
+                println!("{tag} {}", f.hint);
+                worst = worst.max(f.level);
+            }
+            Ok(if worst == Level::Fail {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            })
+        }
+        "export" => {
+            let mut from_stdin = false;
+            let mut dest = None;
+            for a in &args {
+                match a.as_str() {
+                    "--bundle-passphrase-stdin" => from_stdin = true,
+                    _ if dest.is_none() => dest = Some(a),
+                    _ => return Err(Fail::Usage),
+                }
+            }
+            let dest = dest.ok_or(Fail::Usage)?;
+            let s = open(&path, &how, &mut input, ask)?;
+            let bp = bundle_passphrase(from_stdin, true, &mut input, ask)?;
+            let mut bundle = FileStore::create(std::path::Path::new(dest), &bp)?;
+            s.export_to(&mut bundle)?;
+            println!("exported {} entries", s.list().len());
+            Ok(ExitCode::SUCCESS)
+        }
+        "import" => {
+            let mut from_stdin = false;
+            let mut apply = false;
+            let mut conflict = ImportConflict::Refuse;
+            let mut src = None;
+            let mut it = args.iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--bundle-passphrase-stdin" => from_stdin = true,
+                    "--apply" => apply = true,
+                    "--conflict" => {
+                        conflict = match it.next().map(String::as_str) {
+                            Some("keep") => ImportConflict::Keep,
+                            Some("replace") => ImportConflict::Replace,
+                            _ => return Err(Fail::Usage),
+                        };
+                    }
+                    _ if src.is_none() => src = Some(a),
+                    _ => return Err(Fail::Usage),
+                }
+            }
+            let src = src.ok_or(Fail::Usage)?;
+            let mut s = open(&path, &how, &mut input, ask)?;
+            let bp = bundle_passphrase(from_stdin, false, &mut input, ask)?;
+            let bundle = FileStore::open_with(std::path::Path::new(src), Unlock::Passphrase(&bp))?;
+            if apply {
+                let r = s.apply_import(&bundle, conflict)?;
+                println!(
+                    "imported: {} added, {} replaced, {} kept",
+                    r.added, r.replaced, r.kept
+                );
+            } else {
+                for item in s.plan_import(&bundle) {
+                    let what = if item.exists { "exists" } else { "new" };
+                    println!("{what:6} {} ({} versions)", item.name, item.versions);
+                }
+                println!("dry run: nothing was written; add --apply to import");
             }
             Ok(ExitCode::SUCCESS)
         }
