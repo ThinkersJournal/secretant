@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.19] — Patent sweep record (docs)
+
+`docs/PATENT-SWEEP.md` now holds the first patent sweep for the 0.1.0 candidate: seven ideas, eleven queries (general web search, not the patent databases), five patents read claim by claim (US10536272B2, US11502833B2, US11057210B1, US10148437B2, US12463959B2), all clear on the independent claims read, and a limitations section stating what was not searched. Delivery (ideas 3 to 5) is flagged as the least searched area. Not legal advice. Docs only; not published.
+
 ## [0.0.18] — **BREAKING**: the command line asks for the passphrase without echo
 
 The `secretant` command line no longer reads `SECRETANT_PASSPHRASE` by default. With no unlock option the passphrase is asked on the terminal with echo off (`init` asks twice and refuses a mismatch or an empty one; `put` and `rotate` also ask the value that way when standard input is a terminal). With no terminal there is no silent fallback: the error names the explicit options. `--passphrase-env` (the old variable, only when named) and `--passphrase-stdin`, `--recovery-stdin`, `--os` remain. The prompt goes to standard error and the answer is read from the terminal itself. Adds the `rpassword` dependency. Logic tested with a scripted terminal (`src/prompt.rs`) and the binary tests (no terminal and no option: refused, nothing created, the variable ignored; a mutation that restores the environment fallback fails it). Echo suppression itself is `rpassword`'s and is not asserted in CI. Not published.
