@@ -579,6 +579,43 @@ impl FileStore {
         })
     }
 
+    /// Add a new version of each named entry, in memory, then write once: all
+    /// of them are in the file written, or none is and the store is as it was.
+    /// Metadata must not hold a secret. Returns the version numbers in order.
+    pub fn put_many(
+        &mut self,
+        items: Vec<(String, SecretValue, BTreeMap<String, String>)>,
+    ) -> Result<Vec<u32>, StoreError> {
+        for (name, _, _) in &items {
+            check_name(name)?;
+        }
+        let at = now_unix();
+        let mut done: Vec<(String, u32)> = Vec::new();
+        for (name, value, meta) in items {
+            let list = self.payload.entries.entry(name.clone()).or_default();
+            let v = list.last().map_or(1, |l| l.v + 1);
+            list.push(Version {
+                v,
+                at,
+                value: Zeroizing::new(value.expose().to_vec()),
+                meta,
+            });
+            done.push((name, v));
+        }
+        if let Err(e) = self.save() {
+            for (name, _) in done.iter().rev() {
+                if let Some(list) = self.payload.entries.get_mut(name) {
+                    list.pop();
+                    if list.is_empty() {
+                        self.payload.entries.remove(name);
+                    }
+                }
+            }
+            return Err(e);
+        }
+        Ok(done.into_iter().map(|(_, v)| v).collect())
+    }
+
     /// Which kinds of wrap the file has (not secret).
     pub fn wrap_kinds(&self) -> Vec<String> {
         self.wraps.iter().map(|w| w.kind.clone()).collect()

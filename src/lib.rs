@@ -7,6 +7,8 @@ mod cloudflare;
 mod deliver;
 mod maintain;
 mod read;
+/// The installer's Secrets step (ROADMAP row 8b).
+pub mod secrets_step;
 mod store;
 mod value;
 
