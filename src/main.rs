@@ -153,6 +153,21 @@ impl Input {
     }
 }
 
+/// An empty passphrase protects nothing: refuse it wherever one is taken.
+fn nonempty(p: SecretValue) -> Result<SecretValue, Fail> {
+    if p.is_empty() {
+        Err(Fail::Text("an empty passphrase is not allowed"))
+    } else {
+        Ok(p)
+    }
+}
+
+fn env_passphrase() -> Result<SecretValue, Fail> {
+    let p = std::env::var("SECRETANT_PASSPHRASE")
+        .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?;
+    nonempty(SecretValue::from_string(p))
+}
+
 fn default_store() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("SECRETANT_STORE") {
         return Some(PathBuf::from(p));
@@ -190,13 +205,11 @@ fn open(
             Ok(FileStore::open_with(path, Unlock::Recovery(&k))?)
         }
         How::Passphrase => {
-            let p = input.line()?;
+            let p = nonempty(input.line()?)?;
             Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
         }
         How::Env => {
-            let p = std::env::var("SECRETANT_PASSPHRASE")
-                .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?;
-            let p = SecretValue::from_string(p);
+            let p = env_passphrase()?;
             Ok(FileStore::open_with(path, Unlock::Passphrase(&p))?)
         }
         How::Prompt => {
@@ -220,13 +233,11 @@ fn with_unlock<T>(
             f(Unlock::Recovery(&k))
         }
         How::Passphrase => {
-            let p = input.line()?;
+            let p = nonempty(input.line()?)?;
             f(Unlock::Passphrase(&p))
         }
         How::Env => {
-            let p = std::env::var("SECRETANT_PASSPHRASE")
-                .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?;
-            let p = SecretValue::from_string(p);
+            let p = env_passphrase()?;
             f(Unlock::Passphrase(&p))
         }
         How::Prompt => {
@@ -246,7 +257,7 @@ fn bundle_passphrase(
     ask: &mut dyn Ask,
 ) -> Result<SecretValue, Fail> {
     if from_stdin {
-        return input.line();
+        return nonempty(input.line()?);
     }
     if new {
         prompt::new_bundle_passphrase(ask).map_err(ask_fail)
@@ -305,11 +316,8 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 }
             }
             let pass = match how {
-                How::Passphrase => input.line()?,
-                How::Env => SecretValue::from_string(
-                    std::env::var("SECRETANT_PASSPHRASE")
-                        .map_err(|_| Fail::Text("SECRETANT_PASSPHRASE is not set"))?,
-                ),
+                How::Passphrase => nonempty(input.line()?)?,
+                How::Env => env_passphrase()?,
                 How::Prompt => prompt::new_passphrase(ask).map_err(ask_fail)?,
                 _ => return Err(Fail::Usage),
             };

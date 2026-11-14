@@ -57,6 +57,8 @@ pub enum StoreError {
     NoSuchStore,
     /// An import would overwrite names already in the store and no choice was made.
     Conflict,
+    /// An empty passphrase was given to protect a store: it protects nothing.
+    EmptyPassphrase,
     /// The name is empty or has a control character.
     BadName,
     /// The operating system refused a file operation.
@@ -79,6 +81,7 @@ impl fmt::Display for StoreError {
             StoreError::Conflict => {
                 "the import would overwrite existing names; choose to keep or replace them"
             }
+            StoreError::EmptyPassphrase => "an empty passphrase is not allowed",
             StoreError::BadName => "the name is empty or contains a control character",
             StoreError::Io => "a file operation failed",
         })
@@ -469,6 +472,9 @@ impl FileStore {
         kdf: KdfParams,
     ) -> Result<Self, StoreError> {
         let path = path.as_ref().to_path_buf();
+        if passphrase.is_empty() {
+            return Err(StoreError::EmptyPassphrase);
+        }
         if path.exists() {
             return Err(StoreError::AlreadyExists);
         }
@@ -1157,6 +1163,18 @@ mod tests {
                 assert!(!contains(hay, to_hex(CANARY.as_bytes()).as_bytes()));
             }
         }
+    }
+
+    #[test]
+    fn an_empty_passphrase_creates_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.secretant");
+        let e = FileStore::create(&path, &pass("")).err().unwrap();
+        assert_eq!(e, StoreError::EmptyPassphrase);
+        assert!(!path.exists(), "no file was written");
+        // Control: a non-empty passphrase creates the file.
+        FileStore::create(&path, &pass("CANARY-not-empty")).unwrap();
+        assert!(path.exists());
     }
 
     #[test]

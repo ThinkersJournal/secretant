@@ -542,3 +542,96 @@ fn export_and_import_dry_run_apply_and_conflicts() {
         VALUE
     );
 }
+
+// ---- an empty passphrase protects nothing and is refused everywhere ----
+
+/// Run with an explicit stdin and environment passphrase (None: variable unset).
+fn run_raw(store: &std::path::Path, args: &[&str], stdin: &str, env_pass: Option<&str>) -> Output {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_secretant"));
+    c.arg("--store")
+        .arg(store)
+        .args(args)
+        .env_remove("SECRETANT_PASSPHRASE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(p) = env_pass {
+        c.env("SECRETANT_PASSPHRASE", p);
+    }
+    let mut child = c.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn an_empty_bundle_passphrase_is_refused_and_no_bundle_is_written() {
+    let a = Run::new();
+    assert!(a.cmd(&["init"], "").status.success());
+    assert!(a.cmd(&["put", NAME], VALUE).status.success());
+    let bundle = a._dir.path().join("bundle.json");
+    let bundle_s = bundle.to_str().unwrap();
+    // End of input, an empty line, and a bare CRLF all mean "empty".
+    for stdin in ["", "\n", "\r\n"] {
+        let o = a.cmd(&["export", bundle_s, "--bundle-passphrase-stdin"], stdin);
+        assert_eq!(
+            o.status.code(),
+            Some(1),
+            "empty bundle passphrase {stdin:?}"
+        );
+        assert!(!bundle.exists(), "no bundle was written");
+        no_canary(&o);
+    }
+    // Control: a real passphrase still works with the same flags.
+    let ok = a.cmd(
+        &["export", bundle_s, "--bundle-passphrase-stdin"],
+        &format!("{BUNDLE_PASS}\n"),
+    );
+    assert!(ok.status.success());
+}
+
+#[test]
+fn an_empty_passphrase_is_refused_by_init_and_by_every_unlock() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store.json");
+    // init: empty stdin line and empty environment variable.
+    let a = run_raw(&store, &["--passphrase-stdin", "init"], "\n", None);
+    assert_eq!(a.status.code(), Some(1));
+    assert!(!store.exists());
+    let b = run_raw(&store, &["--passphrase-env", "init"], "", Some(""));
+    assert_eq!(b.status.code(), Some(1));
+    assert!(!store.exists());
+    // Control: a real passphrase creates the store.
+    let ok = run_raw(
+        &store,
+        &["--passphrase-stdin", "init"],
+        &format!("{PASS}\n"),
+        None,
+    );
+    assert!(ok.status.success());
+    let backup = dir.path().join("b.json");
+    let bs = backup.to_str().unwrap();
+    assert!(run_raw(&store, &["backup", bs], "", None).status.success());
+    // restore-test, restore and doctor go through the same unlock: an empty
+    // passphrase is refused as empty (not tried as a wrong one).
+    for (flag, stdin, env) in [
+        ("--passphrase-stdin", "\n", None),
+        ("--passphrase-env", "", Some("")),
+    ] {
+        for args in [vec!["restore-test", bs], vec!["doctor"]] {
+            let mut full = vec![flag];
+            full.extend(args);
+            let o = run_raw(&store, &full, stdin, env);
+            assert_eq!(o.status.code(), Some(1));
+            assert!(
+                text(&o.stderr).contains("empty"),
+                "refused as empty: {}",
+                text(&o.stderr)
+            );
+        }
+    }
+}
