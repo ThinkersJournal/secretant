@@ -46,7 +46,7 @@ The install **location** is an input, not a default the library hides: the insta
 
 ### 4.2 Secrets step (put the product's secrets in)
 
-Input from the installer: the list of names it needs (for Humboldt, `install::SECRETS`, which a test there already checks against the Worker's `Env`; the names are what the library receives) and, per name, a source: **given** (a value the caller holds, for example the Cloudflare token the person typed) or **generated** (the library draws random bytes of a stated length and writes them; the value is never returned). A generated value's encoding and length are the installer's to state: **UNVERIFIED** what `TOTP_ENCRYPTION_KEY` needs (the Humboldt note does not say).
+Input from the installer: the list of names it needs (for Humboldt, `install::SECRETS`, which a test there already checks against the Worker's `Env`; the names are what the library receives) and, per name, a source: **given** (a value the caller holds, for example the Cloudflare token the person typed) or **generated** (the library draws random bytes of a stated length and writes them; the value is never returned). A generated value's encoding and length are the installer's to state. The Humboldt lane's answer (2026-11-14, from its `backend/src/auth/totp.rs`, not re-read here): `TOTP_ENCRYPTION_KEY` is generated, 32 random bytes written as standard padded base64 (44 characters), the one value the installer generates; typed by the person: `DATABASE_URL`, `WEBAUTHN_*`, the OAuth client ids and secrets and redirects, `RESEND_API_KEY`, `SMTP_URL`, `EMAIL_FROM`, `SECURITY_ALERT_EMAIL`, `DISTRICT_ADMIN_STAFF_IDS`. `APP_BASE_URL` and the `LINK_REQUIRES_FACTOR`, `RESET_REQUIRES_SECOND_FACTOR` and `CLIENT_IP_HEADER` flags are settings, not secrets. So the library needs a Generated source of N random bytes in standard base64 (a stated list of encodings is enough: base64 and hex); the value is never returned.
 
 | Call | Result |
 |---|---|
@@ -82,13 +82,13 @@ CireSnave's words (D6 A) require "a required confirmation that it was written do
 | **B. The person types the whole key back and the library tries to open the pending store with it** | the key was written down *and* is legible and correct | one more screen; a transcription slip is caught at install, not at the emergency |
 | C. The person types two named groups (for example groups 3 and 7) | partly legible | weaker, and groups are guessable only by chance, but it is not a real unlock |
 
-**Recommendation: B.** It is the only option the library can verify, so it is the only one a test can fail. A checkbox stays in the installer as a first screen if it wants one. **To confirm with the PM before row 8 code**: B is a stricter reading of D6 than the words alone; if CireSnave meant a checkbox, A costs nothing to add later.
+**Recommendation: B.** It is the only option the library can verify, so it is the only one a test can fail. A checkbox stays in the installer as a first screen if it wants one. **Approved by the PM on 2026-11-14 (option B)** as satisfying D6's "required confirmation it was written down"; the Humboldt lane agreed to the typed-back key.
 
 ## 6. A second holder for schools (D6 = A)
 
 The prompt is the installer's ("a second person should be able to open this: add one?"). The library needs two things it does not have today:
 
-- **A second passphrase wrap** (`FileStore` has `add_recovery_wrap` and `add_os_wrap`, no way to add another passphrase). The format already allows it: `wraps` is a list, every wrap seals the same data key, `open_with` tries each in turn (`src/store.rs`, read at `origin/main`; `docs/FORMAT.md`). The new call needs its own salt and Argon2id cost and the same empty-passphrase refusal as `create`.
+- **A second passphrase wrap** (`FileStore` had `add_recovery_wrap` and `add_os_wrap`, no way to add another passphrase; added in the PR "Second passphrase wrap and wrap removal", #21). The format already allows it: `wraps` is a list, every wrap seals the same data key, `open_with` tries each in turn (`src/store.rs`, read at `origin/main`; `docs/FORMAT.md`). The new call needs its own salt and Argon2id cost and the same empty-passphrase refusal as `create`.
 - **Removing a wrap**, so a holder who leaves can be taken out (DESIGN section 9 table: "an admin leaves a school"). This changes who can open the store, so it is its own reviewed call, never part of an installer step, and it refuses to remove the last way in.
 
 Both are library work in row 8's first PR, with tests for: the second passphrase opens; the first still opens; a removed wrap no longer opens; the last wrap cannot be removed; neither passphrase is in the file.
@@ -124,6 +124,5 @@ A graphical screen of our own (the installer owns the UI); remote vaults; macOS 
 
 ## 12. What this design could not check
 
-- **UNVERIFIED**: the format and length `TOTP_ENCRYPTION_KEY` needs, and the full `install::SECRETS` list (from the Humboldt side).
-- **UNVERIFIED**: that the installer's engine can take a library-supplied step in-process the way its note describes for the db tools (section 7.3); the change request asks.
+- Answered by the Humboldt lane on 2026-11-14 (agreed items 1, 2, 4, 5, 7 and 8; item 4 with the typed-back key; item 6: in-process crates.io link, and its step engine, not built yet, will take library-supplied steps from the start; one Cloudflare client only, leaning to `secretant::cf`, decided at its slice 5): the `TOTP_ENCRYPTION_KEY` format (section 4.2). Still its to rule: the licence position, which the PM puts to CireSnave.
 - **UNVERIFIED**: that the `secretant` crate builds into the installer's single Windows executable; it uses no OpenSSL and the default build has no TLS crate (the CI job "Default build has no HTTP or TLS stack" guards that once it has run on main), but the combined build has not been tried.
