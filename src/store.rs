@@ -59,6 +59,10 @@ pub enum StoreError {
     Conflict,
     /// An empty passphrase was given to protect a store: it protects nothing.
     EmptyPassphrase,
+    /// The passphrase already opens the store, so adding it as another holder adds nothing.
+    DuplicateWrap,
+    /// The last way to open the store cannot be removed: nothing could open it afterwards.
+    LastWrap,
     /// The name is empty or has a control character.
     BadName,
     /// The operating system refused a file operation.
@@ -82,6 +86,8 @@ impl fmt::Display for StoreError {
                 "the import would overwrite existing names; choose to keep or replace them"
             }
             StoreError::EmptyPassphrase => "an empty passphrase is not allowed",
+            StoreError::DuplicateWrap => "that passphrase already opens the store",
+            StoreError::LastWrap => "the last way to open the store cannot be removed",
             StoreError::BadName => "the name is empty or contains a control character",
             StoreError::Io => "a file operation failed",
         })
@@ -353,6 +359,26 @@ fn data_key_from(k: &[u8]) -> Option<Zeroizing<[u8; KEY_LEN]>> {
 
 /// Try one wrap with the offered unlock. `Ok(None)` means "not this wrap, or the
 /// key did not fit"; `Err` means the file itself is damaged.
+/// A passphrase wrap of `data_key`: its own random salt and nonce, so two
+/// holders with the same passphrase would still have different wraps.
+fn passphrase_wrap(
+    passphrase: &SecretValue,
+    data_key: &[u8; KEY_LEN],
+    kdf: KdfParams,
+) -> Result<Wrap, StoreError> {
+    let salt = random::<SALT_LEN>()?;
+    let nonce = random::<NONCE_LEN>()?;
+    let wrap_key = derive(passphrase, &salt, &kdf)?;
+    let wrapped = seal(wrap_key.as_ref(), &nonce, AAD_WRAP, data_key)?;
+    Ok(Wrap {
+        kind: "passphrase".into(),
+        salt: to_hex(&salt),
+        kdf: Some(kdf),
+        nonce: to_hex(&nonce),
+        wrapped: to_hex(&wrapped),
+    })
+}
+
 fn try_wrap(w: &Wrap, unlock: &Unlock<'_>) -> Result<Option<Zeroizing<[u8; KEY_LEN]>>, StoreError> {
     match (w.kind.as_str(), unlock) {
         ("passphrase", Unlock::Passphrase(pass)) => {
@@ -482,17 +508,7 @@ impl FileStore {
             return Err(StoreError::Corrupt);
         }
         let data_key = Zeroizing::new(random::<KEY_LEN>()?);
-        let salt = random::<SALT_LEN>()?;
-        let nonce = random::<NONCE_LEN>()?;
-        let wrap_key = derive(passphrase, &salt, &kdf)?;
-        let wrapped = seal(wrap_key.as_ref(), &nonce, AAD_WRAP, data_key.as_ref())?;
-        let wrap = Wrap {
-            kind: "passphrase".into(),
-            salt: to_hex(&salt),
-            kdf: Some(kdf),
-            nonce: to_hex(&nonce),
-            wrapped: to_hex(&wrapped),
-        };
+        let wrap = passphrase_wrap(passphrase, &data_key, kdf)?;
         let store = Self {
             path,
             data_key,
@@ -577,6 +593,57 @@ impl FileStore {
             nonce: String::new(),
             wrapped: to_hex(&blob),
         })
+    }
+
+    /// Add a second holder: another passphrase that opens the same store (a
+    /// second person at a school, DESIGN D6). It has its own salt and the
+    /// default Argon2id cost; the first passphrase keeps working. An empty
+    /// passphrase is refused, and so is one that already opens the store.
+    pub fn add_passphrase_wrap(&mut self, passphrase: &SecretValue) -> Result<(), StoreError> {
+        self.add_passphrase_wrap_with_params(passphrase, KdfParams::default())
+    }
+
+    /// As [`FileStore::add_passphrase_wrap`] with explicit Argon2id costs.
+    pub fn add_passphrase_wrap_with_params(
+        &mut self,
+        passphrase: &SecretValue,
+        kdf: KdfParams,
+    ) -> Result<(), StoreError> {
+        if passphrase.is_empty() {
+            return Err(StoreError::EmptyPassphrase);
+        }
+        if !kdf.acceptable() {
+            return Err(StoreError::Corrupt);
+        }
+        let unlock = Unlock::Passphrase(passphrase);
+        for w in &self.wraps {
+            if try_wrap(w, &unlock)?.is_some() {
+                return Err(StoreError::DuplicateWrap);
+            }
+        }
+        let wrap = passphrase_wrap(passphrase, &self.data_key, kdf)?;
+        self.push_wrap(wrap)
+    }
+
+    /// Remove the wrap at `index` (the position in [`FileStore::wrap_kinds`]):
+    /// that way of opening the store stops working in the file written now.
+    /// The last wrap cannot be removed. **This is not revocation**: the data key
+    /// is not changed, so anyone who kept a copy of the file from before, and
+    /// the passphrase or key of the removed wrap, can still open that copy.
+    /// After removing a person, replace the secrets that person could read.
+    pub fn remove_wrap(&mut self, index: usize) -> Result<(), StoreError> {
+        if index >= self.wraps.len() {
+            return Err(StoreError::NotFound);
+        }
+        if self.wraps.len() == 1 {
+            return Err(StoreError::LastWrap);
+        }
+        let removed = self.wraps.remove(index);
+        if let Err(e) = self.save() {
+            self.wraps.insert(index, removed);
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// Which kinds of wrap the file has (not secret).
@@ -1175,6 +1242,93 @@ mod tests {
         // Control: a non-empty passphrase creates the file.
         FileStore::create(&path, &pass("CANARY-not-empty")).unwrap();
         assert!(path.exists());
+    }
+
+    #[test]
+    fn a_second_passphrase_opens_the_store_and_the_first_still_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put(
+            "N",
+            SecretValue::from_string(CANARY.into()),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        s.add_passphrase_wrap_with_params(&pass("CANARY-second-holder"), FAST)
+            .unwrap();
+        assert_eq!(s.wrap_kinds(), ["passphrase", "passphrase"]);
+        for p in ["pw", "CANARY-second-holder"] {
+            let o = FileStore::open(&path, &pass(p)).unwrap();
+            assert_eq!(o.get("N").unwrap().expose(), CANARY.as_bytes());
+        }
+        assert_eq!(
+            FileStore::open(&path, &pass("neither")).err().unwrap(),
+            StoreError::WrongPassphrase
+        );
+        // The second passphrase is nowhere in the file, in any form.
+        let bytes = fs::read(&path).unwrap();
+        for form in [
+            "CANARY-second-holder".to_string(),
+            to_hex(b"CANARY-second-holder"),
+        ] {
+            assert!(!contains(&bytes, form.as_bytes()));
+        }
+        // Control: the search does find text that is there.
+        assert!(contains(&bytes, b"passphrase"));
+    }
+
+    #[test]
+    fn adding_an_empty_or_duplicate_passphrase_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        let before = fs::read(&path).unwrap();
+        assert_eq!(
+            s.add_passphrase_wrap_with_params(&pass(""), FAST).err(),
+            Some(StoreError::EmptyPassphrase)
+        );
+        assert_eq!(
+            s.add_passphrase_wrap_with_params(&pass("pw"), FAST).err(),
+            Some(StoreError::DuplicateWrap)
+        );
+        assert_eq!(before, fs::read(&path).unwrap());
+        assert_eq!(s.wrap_kinds().len(), 1);
+    }
+
+    #[test]
+    fn a_removed_wrap_no_longer_opens_and_the_last_one_cannot_be_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.add_passphrase_wrap_with_params(&pass("second"), FAST)
+            .unwrap();
+        s.remove_wrap(0).unwrap();
+        assert_eq!(
+            FileStore::open(&path, &pass("pw")).err().unwrap(),
+            StoreError::WrongPassphrase
+        );
+        FileStore::open(&path, &pass("second")).unwrap();
+        let before = fs::read(&path).unwrap();
+        assert_eq!(s.remove_wrap(0).err(), Some(StoreError::LastWrap));
+        assert_eq!(s.remove_wrap(7).err(), Some(StoreError::NotFound));
+        assert_eq!(before, fs::read(&path).unwrap());
+        FileStore::open(&path, &pass("second")).unwrap();
+    }
+
+    #[test]
+    fn removal_leaves_an_older_copy_openable_so_it_is_not_revocation() {
+        // The stated limit, kept as a test so the doc comment cannot drift.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.add_passphrase_wrap_with_params(&pass("leaver"), FAST)
+            .unwrap();
+        let copy = dir.path().join("older-copy.secretant");
+        fs::copy(&path, &copy).unwrap();
+        s.remove_wrap(1).unwrap();
+        assert!(FileStore::open(&path, &pass("leaver")).is_err());
+        FileStore::open(&copy, &pass("leaver")).unwrap();
     }
 
     #[test]
