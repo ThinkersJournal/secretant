@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.21] — backup, restore-test, restore, doctor, export, import commands
+
+The command line gains the row 7 commands. `secretant backup DEST` copies the store file as it is (ciphertext, owner-only, never over an existing file) and needs no unlock; `restore-test BACKUP` opens it and decrypts every version, printing counts only; `restore BACKUP [--replace]` checks the backup first, refuses to replace a store unless asked and keeps the old file as `.prev`; `doctor [--header-only]` prints fixed-sentence findings (no name, no path) and exits 1 on a failure; `export BUNDLE` writes every entry and version to a new store file under its own passphrase (asked twice, or `--bundle-passphrase-stdin`); `import BUNDLE` is a dry run listing names and version counts, and `--apply` imports, with `--conflict keep|replace` for names already present (without a choice a conflict refuses and writes nothing; nothing is ever deleted). Verified by `tests/cli.rs`: the backup and the bundle are searched for the recovery key, passphrase and value in plain, bare, upper, lower, hex, base64 and UTF-16 forms (with a planted-text control); a backup that leaks the passphrase and a restore that skips the replace check were each made and each failed a test. An empty passphrase is refused by `init`, every unlock and a new bundle (`StoreError::EmptyPassphrase`, also checked in `FileStore::create`). Not published.
+
 ## [0.0.19] — Patent sweep record (docs)
 
 `docs/PATENT-SWEEP.md` now holds the first patent sweep for the 0.1.0 candidate: seven ideas, eleven queries (general web search, not the patent databases), five patents read claim by claim (US10536272B2, US11502833B2, US11057210B1, US10148437B2, US12463959B2), all clear on the independent claims read, and a limitations section stating what was not searched. Delivery (ideas 3 to 5) is flagged as the least searched area. Not legal advice. Docs only; not published.
