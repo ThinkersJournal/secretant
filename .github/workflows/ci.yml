@@ -38,10 +38,10 @@ jobs:
       - name: cargo build
         run: cargo build --locked --all-targets
 
-      - name: cargo test (default features: the store, no HTTP client)
+      - name: "cargo test (default features: the store, no HTTP client)"
         run: cargo test --locked --no-fail-fast
 
-      - name: cargo test (all features: adds Cloudflare delivery)
+      - name: "cargo test (all features: adds Cloudflare delivery)"
         run: cargo test --locked --no-fail-fast --all-features
 
       - name: cargo clippy (all features)
