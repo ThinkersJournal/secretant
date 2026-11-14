@@ -5,6 +5,8 @@
 
 mod cloudflare;
 mod deliver;
+/// The installer step library (ROADMAP row 8).
+pub mod installer;
 mod maintain;
 mod read;
 mod store;
