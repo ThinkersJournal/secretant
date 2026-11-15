@@ -161,7 +161,10 @@ impl Ledger {
         self.version_by(&p.name, &p.target.key())
     }
 
-    #[cfg_attr(not(feature = "cloudflare"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "cloudflare"),
+        allow(dead_code, reason = "used only by the cloudflare feature")
+    )]
     pub(crate) fn version_by(&self, name: &str, key: &str) -> Option<u32> {
         self.file
             .placed
@@ -174,7 +177,10 @@ impl Ledger {
         self.record_by(&p.name, &p.target.key(), version)
     }
 
-    #[cfg_attr(not(feature = "cloudflare"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "cloudflare"),
+        allow(dead_code, reason = "used only by the cloudflare feature")
+    )]
     pub(crate) fn record_by(
         &mut self,
         name: &str,
@@ -199,7 +205,10 @@ impl Ledger {
     }
 }
 
-#[cfg_attr(not(feature = "cloudflare"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "cloudflare"),
+    allow(dead_code, reason = "used only by the cloudflare feature")
+)]
 pub(crate) fn valid_var(var: &str) -> bool {
     !var.is_empty()
         && !var.starts_with(|c: char| c.is_ascii_digit())
