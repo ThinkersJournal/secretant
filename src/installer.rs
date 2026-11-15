@@ -8,7 +8,7 @@
 //!
 //! Creating a store is ordered so that a crash never leaves a store whose
 //! recovery key nobody saw: the store is written at `PATH.pending`, the key is
-//! returned once, and the file only becomes `PATH` after [`confirm_recovery`]
+//! returned once, and the file only becomes `PATH` after `confirm_recovery`
 //! has opened it with the key the person typed back.
 
 use crate::store::{FileStore, Inspection, StoreError, Unlock};
