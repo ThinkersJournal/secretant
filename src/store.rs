@@ -627,7 +627,8 @@ impl FileStore {
 
     /// Remove the wrap at `index` (the position in [`FileStore::wrap_kinds`]):
     /// that way of opening the store stops working in the file written now.
-    /// The last wrap cannot be removed. **This is not revocation**: the data key
+    /// The previous generation (`.prev`) is rewritten without the wrap too, so
+    /// the store's own files no longer open with it. The last wrap cannot be removed. **This is not revocation**: the data key
     /// is not changed, so anyone who kept a copy of the file from before, and
     /// the passphrase or key of the removed wrap, can still open that copy.
     /// After removing a person, replace the secrets that person could read.
@@ -642,6 +643,17 @@ impl FileStore {
         if let Err(e) = self.save() {
             self.wraps.insert(index, removed);
             return Err(e);
+        }
+        // `save` kept the file as it was as `.prev`, and that still holds the
+        // removed wrap. The payload is unchanged by a removal, so the new file is
+        // an equally good previous generation: put it there.
+        let prev = sibling(&self.path, "prev");
+        let current = fs::read(&self.path).map_err(|_| StoreError::Io)?;
+        if write_private_atomic(&prev, &current).is_err() {
+            let _ = fs::remove_file(&prev);
+            if prev.exists() {
+                return Err(StoreError::Io);
+            }
         }
         Ok(())
     }
@@ -1314,6 +1326,32 @@ mod tests {
         assert_eq!(s.remove_wrap(7).err(), Some(StoreError::NotFound));
         assert_eq!(before, fs::read(&path).unwrap());
         FileStore::open(&path, &pass("second")).unwrap();
+    }
+
+    #[test]
+    fn removal_also_removes_the_wrap_from_the_previous_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put(
+            "N",
+            SecretValue::from_string(CANARY.into()),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        s.add_passphrase_wrap_with_params(&pass("leaver"), FAST)
+            .unwrap();
+        s.remove_wrap(1).unwrap();
+        let prev = sibling(&path, "prev");
+        assert!(prev.exists());
+        assert_eq!(
+            FileStore::open(&prev, &pass("leaver")).err(),
+            Some(StoreError::WrongPassphrase)
+        );
+        // The remaining holder still opens both generations and sees the data.
+        let o = FileStore::open(&prev, &pass("pw")).unwrap();
+        assert_eq!(o.get("N").unwrap().expose(), CANARY.as_bytes());
+        FileStore::open(&path, &pass("pw")).unwrap();
     }
 
     #[test]
