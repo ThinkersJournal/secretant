@@ -1,6 +1,6 @@
 [package]
 name = "secretant"
-version = "0.0.30"
+version = "0.0.31"
 edition = "2024"
 description = "Placeholder: SecretAnt, secrets handling. Not yet released."
 license = "MIT OR Apache-2.0"
@@ -38,4 +38,8 @@ required-features = ["cloudflare"]
 
 [[test]]
 name = "cloudflare_logs"
+required-features = ["cloudflare"]
+
+[[test]]
+name = "place_cloudflare"
 required-features = ["cloudflare"]
