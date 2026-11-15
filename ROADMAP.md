@@ -41,5 +41,4 @@ Smallest set that lets ConfigurAnt publish its adapter (rows 1-3) and lets the H
 
 ## Open decisions (the PM sends them to CireSnave)
 
-Full text and options: `docs/DESIGN.md` section 14. Blocks row 1: D3 and D5. Row 1 proceeds on the recommended answers (D3 A, D5 A) until told otherwise.
-D1 blocks row 5 (default is push); D4 and D6 block row 8; D2 and D7 block the web interface only; D8 blocks row 10 and `with-secret` work.
+Full text and options: `docs/DESIGN.md` section 14. Rulings (the PM, 2026-11-14): board 319 (2026-10-28), CireSnave verbatim "1: recommended.", ruled all of D1 to D8 as recommended, so **D4 = A and D6 = A** (row 8's installer requirements: school secrets stay with the school; recovery key shown once, a required confirmation it was written down, a prompt for a second holder). D3 = A and D5 = A: board 400. No decision blocks rows 1 to 8 now; row 8's remaining blocker is the Humboldt installer owner's agreement to `docs/HUMBOLDT-CHANGE-REQUEST.md`. D2 and D7 gate the web interface only; D8 gates row 10 and `with-secret` work.
