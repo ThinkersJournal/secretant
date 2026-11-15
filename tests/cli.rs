@@ -245,12 +245,9 @@ fn with_no_terminal_and_no_option_nothing_is_read_from_the_environment() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = c.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(PASS.as_bytes())
-        .unwrap();
+    // The program refuses at once and may exit before this write: a broken pipe
+    // here is the program having already refused, not a failure of the test.
+    let _ = child.stdin.take().unwrap().write_all(PASS.as_bytes());
     let o = child.wait_with_output().unwrap();
     assert_eq!(
         o.status.code(),

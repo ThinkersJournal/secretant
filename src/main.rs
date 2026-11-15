@@ -28,9 +28,11 @@
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
 use secretant::{
-    Action, CloudflareError, CloudflareWorker, DeliverError, FileStore, ImportConflict, Ledger,
-    Level, Placement, SecretValue, State, Store, StoreError, Target, Unlock,
+    Action, DeliverError, FileStore, ImportConflict, Ledger, Level, Placement, SecretValue, State,
+    Store, StoreError, Target, Unlock,
 };
+#[cfg(feature = "cloudflare")]
+use secretant::{CloudflareError, CloudflareWorker};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -544,6 +546,11 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 status.code().map_or(1, |c| u8::try_from(c).unwrap_or(1)),
             ))
         }
+        #[cfg(not(feature = "cloudflare"))]
+        "cloudflare" => Err(Fail::Text(
+            "this build has no Cloudflare support: build with --features cloudflare",
+        )),
+        #[cfg(feature = "cloudflare")]
         "cloudflare" => {
             let [mode, manifest] = args.as_slice() else {
                 return Err(Fail::Usage);
@@ -706,6 +713,7 @@ fn read_manifest(path: &str) -> Result<Vec<Placement>, Fail> {
         .collect()
 }
 
+#[cfg(feature = "cloudflare")]
 #[derive(serde::Deserialize)]
 struct CfManifest {
     account_id: String,
@@ -714,14 +722,17 @@ struct CfManifest {
     secrets: Vec<CfEntry>,
 }
 
+#[cfg(feature = "cloudflare")]
 #[derive(serde::Deserialize)]
 struct CfEntry {
     name: String,
     var: String,
 }
 
+#[cfg(feature = "cloudflare")]
 type CfPlan = (CloudflareWorker, String, Vec<(String, String)>);
 
+#[cfg(feature = "cloudflare")]
 fn read_cf_manifest(path: &str) -> Result<CfPlan, Fail> {
     let bytes = std::fs::read(path).map_err(|_| Fail::Text("the manifest could not be read"))?;
     let m: CfManifest =
