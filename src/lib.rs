@@ -6,6 +6,8 @@
 #[cfg(feature = "cloudflare")]
 mod cloudflare;
 mod deliver;
+/// The installer step library (ROADMAP row 8).
+pub mod installer;
 mod maintain;
 mod read;
 /// The installer's Secrets step (ROADMAP row 8b).
