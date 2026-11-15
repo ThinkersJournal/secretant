@@ -31,6 +31,8 @@ Versions of one name are in order, `v` counts from 1, `value` is the secret's by
 
 ## Wraps (what unlocks the data key)
 
+A store may have several wraps of one kind (for example two passphrase wraps for two holders, each with its own salt). Removing a wrap
+changes the file written from then on (and the `.prev` generation is rewritten without it); the data key is not changed, so an older copy of the file still opens with a removed wrap's passphrase.
 Each wrap independently encrypts the same data key (XChaCha20-Poly1305, associated data `secretant-1-wrap`); any one opens the store.
 
 | `kind` | key that seals the data key | fields |
