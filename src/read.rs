@@ -88,6 +88,8 @@ impl From<StoreError> for ReadError {
             | StoreError::AlreadyExists
             | StoreError::Conflict
             | StoreError::EmptyPassphrase
+            | StoreError::DuplicateWrap
+            | StoreError::LastWrap
             | StoreError::NoSuchStore
             | StoreError::Io => ReadError::Unreachable,
         }
