@@ -6,7 +6,7 @@
 //! (`probe`, `plan`, `apply`, `read_back`), plus the fingerprint that makes
 //! `apply` refuse a plan whose situation has changed. It never asks, prints or
 //! logs, and carries names, indexes, versions and classes only: never a value.
-//! Placing to a Cloudflare Worker is not in this step yet.
+//! Placing to a Cloudflare Worker is the `cloudflare` submodule (feature `cloudflare`).
 
 use crate::deliver::{self, Action, DeliverError, Ledger, Placement, State};
 use crate::store::Store;
@@ -118,4 +118,138 @@ pub fn read_back_place(
     placements: &[Placement],
 ) -> Vec<(usize, State)> {
     deliver::verify(store, ledger, placements)
+}
+
+/// The Place step for a Cloudflare Worker (needs the `cloudflare` feature).
+///
+/// The same four calls and fingerprint as the file step. Worker secrets are
+/// write-only, so a probe says set, unset or stale (by the ledger), never what
+/// the value is. The token is a stored secret named by the caller; it is read
+/// from the store per call and never appears in a plan, a report or an error.
+#[cfg(feature = "cloudflare")]
+pub mod cloudflare {
+    use crate::cloudflare::{self as cf, CloudflareError, CloudflareWorker, Mapping};
+    use crate::deliver::{Action, Ledger, State};
+    use crate::store::Store;
+    use std::fmt;
+
+    /// Why the step could not go on. A class only.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum CloudflarePlaceError {
+        /// The Worker or the store changed since the plan was made: plan again.
+        StalePlan,
+        /// Cloudflare or the store refused; nothing was sent after the refusal.
+        Cloudflare(CloudflareError),
+    }
+
+    impl From<CloudflareError> for CloudflarePlaceError {
+        fn from(e: CloudflareError) -> Self {
+            CloudflarePlaceError::Cloudflare(e)
+        }
+    }
+
+    impl fmt::Display for CloudflarePlaceError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                CloudflarePlaceError::StalePlan => {
+                    f.write_str("the Worker changed since the plan was made: plan again")
+                }
+                CloudflarePlaceError::Cloudflare(e) => e.fmt(f),
+            }
+        }
+    }
+
+    impl std::error::Error for CloudflarePlaceError {}
+
+    /// What each mapping's Worker secret is right now: unset, stale or current
+    /// (by the ledger). Reads the Worker's secret names; writes nothing.
+    pub fn probe_cloudflare(
+        store: &dyn Store,
+        ledger: &Ledger,
+        worker: &CloudflareWorker,
+        token_name: &str,
+        mappings: &[Mapping],
+    ) -> Result<Vec<(usize, State)>, CloudflarePlaceError> {
+        Ok(cf::verify(store, ledger, worker, token_name, mappings)?)
+    }
+
+    /// A plan: what `apply` will send, and the probe it was made from.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct CloudflarePlan {
+        mappings: Vec<Mapping>,
+        probe: Vec<(usize, State)>,
+        actions: Vec<(usize, Action)>,
+    }
+
+    impl CloudflarePlan {
+        /// What will be done for each mapping, by index.
+        pub fn actions(&self) -> &[(usize, Action)] {
+            &self.actions
+        }
+
+        /// Nothing to send.
+        pub fn is_noop(&self) -> bool {
+            self.actions.iter().all(|(_, a)| *a == Action::Unchanged)
+        }
+    }
+
+    /// Turn the mappings into a plan. Reads, sends no value. Fails if the token
+    /// cannot list the Worker's secrets (so `apply` would fail too).
+    pub fn plan_cloudflare(
+        store: &dyn Store,
+        ledger: &Ledger,
+        worker: &CloudflareWorker,
+        token_name: &str,
+        mappings: Vec<Mapping>,
+    ) -> Result<CloudflarePlan, CloudflarePlaceError> {
+        let probe = probe_cloudflare(store, ledger, worker, token_name, &mappings)?;
+        let actions = cf::plan(store, ledger, worker, token_name, &mappings)?;
+        Ok(CloudflarePlan {
+            mappings,
+            probe,
+            actions,
+        })
+    }
+
+    /// What `apply` did: counts only.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct CloudflareApplied {
+        /// Secrets sent, in one request (one new script version).
+        pub sent: u32,
+        /// Secrets already current, left alone.
+        pub unchanged: u32,
+    }
+
+    /// Do exactly the plan, if the Worker and the store are still as they were
+    /// when it was made. All or nothing: one request, and the ledger is written
+    /// only after Cloudflare accepts it.
+    pub fn apply_cloudflare(
+        store: &dyn Store,
+        ledger: &mut Ledger,
+        worker: &CloudflareWorker,
+        token_name: &str,
+        plan: &CloudflarePlan,
+    ) -> Result<CloudflareApplied, CloudflarePlaceError> {
+        let now = probe_cloudflare(store, ledger, worker, token_name, &plan.mappings)?;
+        if now != plan.probe {
+            return Err(CloudflarePlaceError::StalePlan);
+        }
+        let sent = cf::apply(store, ledger, worker, token_name, &plan.mappings)? as u32;
+        Ok(CloudflareApplied {
+            sent,
+            unchanged: plan.mappings.len() as u32 - sent,
+        })
+    }
+
+    /// Prove the result as far as a write-only target allows: one state per
+    /// mapping. The step went well when every state is [`State::InSync`].
+    pub fn read_back_cloudflare(
+        store: &dyn Store,
+        ledger: &Ledger,
+        worker: &CloudflareWorker,
+        token_name: &str,
+        mappings: &[Mapping],
+    ) -> Result<Vec<(usize, State)>, CloudflarePlaceError> {
+        probe_cloudflare(store, ledger, worker, token_name, mappings)
+    }
 }
