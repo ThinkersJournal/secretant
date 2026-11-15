@@ -7,6 +7,8 @@
 mod cloudflare;
 mod deliver;
 mod maintain;
+/// The installer's Place step for files and environment files (ROADMAP row 8b).
+pub mod place_step;
 mod read;
 /// The installer's Secrets step (ROADMAP row 8b).
 pub mod secrets_step;
