@@ -2,7 +2,7 @@
 //! The installer's Place step for files and environment files (ROADMAP row 8b,
 //! second half; design in `docs/INSTALLER-STEPS.md` 4.3).
 //!
-//! A thin step over [`crate::deliver`]: the same four calls as the other steps
+//! A thin step over the delivery functions (`plan`, `apply`, `verify`): the same four calls as the other steps
 //! (`probe`, `plan`, `apply`, `read_back`), plus the fingerprint that makes
 //! `apply` refuse a plan whose situation has changed. It never asks, prints or
 //! logs, and carries names, indexes, versions and classes only: never a value.
