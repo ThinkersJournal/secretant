@@ -1,12 +1,12 @@
 # Roadmap
 
-Status 2026-11-08. Design is `docs/DESIGN.md` (merged, #1). No code yet. Row numbers here are build order; DESIGN.md section 12 slice numbers are in
+Status 2026-11-16: rows 1 to 8 are merged (row 7 is #17 and #19, row 8 is #20 to #26) and 0.1.0 is set but unpublished; rows 9 to 11 are blocked (see below). Design is `docs/DESIGN.md` (merged, #1). Row numbers here are build order; DESIGN.md section 12 slice numbers are in
 brackets. One PR per row (or slice of a row); known-bad tests first; the PM allocates the version at the gate.
 
 **Who is waiting:** ConfigurAnt rows 4 and 25 (an adapter crate that implements `SecretSource` for SecretAnt; held until SecretAnt is on
 crates.io with a stable read API); the Humboldt installer (`docs/INSTALLER-DESIGN.md`: keep a school's secrets in one place the school controls).
 
-## v1 = rows 1 to 6
+## v1 = rows 1 to 6 (all merged)
 
 Smallest set that lets ConfigurAnt publish its adapter (rows 1-3) and lets the Humboldt installer keep and place a school's secrets (rows 4-6).
 
@@ -19,15 +19,15 @@ Smallest set that lets ConfigurAnt publish its adapter (rows 1-3) and lets the H
 | 5 [4] | Delivery plan/apply/verify for file (owner-only perms) and environment, drift report that never shows values; records what was placed where | pushed file permissions checked; drift detected after a hand edit; failed target stays stale, never half-rotated | ConfigurAnt `env`/`file:` sources work with no new code | Humboldt Docker target |
 | 6 [5] | Cloudflare Worker secret delivery (first check the API; Worker secrets are write-only so `verify` says set/unset) | fake-API test: token scope and failure handling; canary absent from requests logged | the Humboldt Worker's secrets (`TOTP_ENCRYPTION_KEY`, database URL) placed from the school's store | Humboldt installer |
 
-## After v1, in order
+## After v1, in order (rows 7 and 8 merged; 9 to 11 blocked)
 
 | Row | Deliverable | Needs |
 |---|---|---|
 | 7 [6] | Backup, export/import bundle (dry-run first), restore test, `doctor` | 1, 2 |
 | 8 [7] | Installer step library (`probe/plan/apply/read_back`), recovery-key confirmation, Humboldt change request | 2, 7 |
-| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2 |
-| 10 [3] | SecretAnt's own ConfigurAnt schema and the cycle check | 3 |
-| 11 [8] | Adopt RedactAnt and AuditAnt when published | those |
+| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2; blocked: no test environment |
+| 10 [3] | SecretAnt's own ConfigurAnt schema and the cycle check | 3; blocked: needs ConfigurAnt on crates.io |
+| 11 [8] | Adopt RedactAnt and AuditAnt when published | those; blocked: not published |
 
 ## NOT in v1
 
