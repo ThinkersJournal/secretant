@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.33] — command-line basics (clap), tests use what they call
+
+The `secretant` command line is parsed by `clap` (CodeRipper OPS-012) instead of by hand: `--help` and `-h` (also per command) print the help and exit 0, `--version` and `-V` print `secretant VERSION` and exit 0 (OPS-011); a missing command, an unknown flag or command, or a stray argument exits 2 with one fixed sentence that never echoes what was typed (a value given as an argument is still refused and never shown). Unlock options may now come anywhere on the line; if several are given, `--passphrase-stdin`, `--recovery-stdin`, `--os`, `--passphrase-env` win in that order. Commands, arguments, output and exit codes are otherwise as before, checked by the existing `tests/cli.rs` and a new test for help, version and the fixed usage sentence. The tests in `deliver.rs` and `store.rs` that called `apply` and `new_store` and dropped the result now check it (the two unused-return-values findings). Adds the dependency `clap` (no default features; no network or TLS code).
+
 ## [0.0.32] — installer worked example and plain-words constant
 
 `secretant::installer::PLAIN_WORDS` and `plain_words(protection)`: the text of DESIGN 8.2 the installer shows before first use. `docs/INSTALLER-EXAMPLE.md` is the worked example; `tests/installer_example.rs` runs it end to end (store, recovery confirmation, secrets, place; a second run changes no file; no secret in anything shown, with a control) and checks the plain words against DESIGN 8.2 word for word and the document against the calls it names.

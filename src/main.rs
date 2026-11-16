@@ -34,7 +34,6 @@ use secretant::{
 #[cfg(feature = "cloudflare")]
 use secretant::{CloudflareError, CloudflareWorker};
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
@@ -42,40 +41,135 @@ use std::process::{Command, ExitCode};
 mod prompt;
 use prompt::{Ask, AskError, Terminal};
 
-const USAGE: &str =
-    "usage: secretant [--store PATH] [--passphrase-stdin | --recovery-stdin | --os | --passphrase-env] COMMAND
-  (no unlock option: the passphrase is asked on the terminal, no echo)
-  init [--recovery] [--add-os]   create a store (new passphrase asked twice on the terminal)
-  put NAME                       add a version; the value is asked (no echo) or read from stdin
-  rotate NAME                    like put, but NAME must already exist
-  get NAME [--version N]         print the value to stdout
-  list                           print the names
-  run NAME[,NAME] -- CMD ARGS    run CMD with each NAME as an environment variable
-  backup DEST                    copy the store file (ciphertext) to DEST; needs no unlock
-  restore-test BACKUP            open BACKUP and decrypt every version; prints counts
-  restore BACKUP [--replace]     put BACKUP in place of the store (the old file is kept as .prev)
-  doctor [--header-only]         check the store file; --header-only skips unlocking
-  export BUNDLE [--bundle-passphrase-stdin]
-                                 write every entry to a new store file under its own passphrase
-  import BUNDLE [--apply] [--conflict keep|replace] [--bundle-passphrase-stdin]
-                                 show what an import would do; --apply does it (nothing is deleted)
-  cloudflare plan|apply|verify MANIFEST  set a Cloudflare Worker's secrets from the store;
-                                       prints names and states, never values
-  deliver plan|apply|verify MANIFEST   place values in files named by a JSON manifest;
-                                       prints names and states, never values
-";
+/// The command line. Parsed by `clap`; the help text is what `--help` prints.
+///
+/// If several unlock options are given, the first of `--passphrase-stdin`,
+/// `--recovery-stdin`, `--os`, `--passphrase-env` (in that order) is used.
+///
+/// A value is never an argument, so a command that takes one reads it from
+/// standard input or the terminal. A parse error prints one fixed sentence and
+/// never echoes what was typed.
+#[derive(clap::Parser)]
+#[command(
+    name = "secretant",
+    version,
+    about = "One place, controlled by its owner, where secrets live"
+)]
+struct Cli {
+    /// The store file (else SECRETANT_STORE, else the per-user default)
+    #[arg(long, global = true, value_name = "PATH")]
+    store: Option<PathBuf>,
+    /// Read the passphrase from the first line of standard input
+    #[arg(long, global = true)]
+    passphrase_stdin: bool,
+    /// Read the recovery key from the first line of standard input
+    #[arg(long, global = true)]
+    recovery_stdin: bool,
+    /// Unlock with the Windows user account
+    #[arg(long, global = true)]
+    os: bool,
+    /// Take the passphrase from the variable SECRETANT_PASSPHRASE
+    #[arg(long, global = true)]
+    passphrase_env: bool,
+    #[command(subcommand)]
+    command: Cmd,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Plan,
+    Apply,
+    Verify,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy)]
+enum Conflict {
+    Keep,
+    Replace,
+}
+
+#[derive(clap::Subcommand)]
+enum Cmd {
+    /// Create a store (the new passphrase is asked twice on the terminal)
+    Init {
+        /// Also add a recovery key, shown once
+        #[arg(long)]
+        recovery: bool,
+        /// Also add the Windows user-account wrap
+        #[arg(long)]
+        add_os: bool,
+    },
+    /// Add a version; the value is asked (no echo) or read from standard input
+    Put { name: String },
+    /// Like put, but NAME must already exist
+    Rotate { name: String },
+    /// Print the value to standard output
+    Get {
+        name: String,
+        /// A specific version
+        #[arg(long)]
+        version: Option<u32>,
+    },
+    /// Print the names
+    List,
+    /// Run a command with each NAME as an environment variable
+    Run {
+        /// NAME or NAME,NAME
+        names: String,
+        /// The command and its arguments, after `--`
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+    /// Copy the store file (ciphertext) to DEST; needs no unlock
+    Backup { dest: String },
+    /// Open BACKUP and decrypt every version; prints counts
+    RestoreTest { backup: String },
+    /// Put BACKUP in place of the store (the old file is kept as .prev)
+    Restore {
+        backup: String,
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Check the store file
+    Doctor {
+        /// Skip unlocking
+        #[arg(long)]
+        header_only: bool,
+    },
+    /// Write every entry to a new store file under its own passphrase
+    Export {
+        bundle: String,
+        #[arg(long)]
+        bundle_passphrase_stdin: bool,
+    },
+    /// Show what an import would do; --apply does it (nothing is deleted)
+    Import {
+        bundle: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long, value_enum)]
+        conflict: Option<Conflict>,
+        #[arg(long)]
+        bundle_passphrase_stdin: bool,
+    },
+    /// Set a Cloudflare Worker's secrets from the store; prints names and states, never values
+    Cloudflare { mode: Mode, manifest: String },
+    /// Place values in files named by a JSON manifest; prints names and states, never values
+    Deliver { mode: Mode, manifest: String },
+}
 
 /// Exit codes: 0 done, 1 refused or failed, 2 wrong usage.
 fn main() -> ExitCode {
-    let args: Vec<String> = match std::env::args_os()
-        .skip(1)
-        .map(OsString::into_string)
-        .collect::<Result<_, _>>()
-    {
-        Ok(a) => a,
+    use clap::{Parser, error::ErrorKind};
+    let cli = match Cli::try_parse_from(std::env::args_os()) {
+        Ok(c) => c,
+        Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
+            print!("{e}");
+            return ExitCode::SUCCESS;
+        }
         Err(_) => return usage(),
     };
-    match go(args, &mut Terminal) {
+    match go(cli, &mut Terminal) {
         Ok(code) => code,
         Err(Fail::Usage) => usage(),
         Err(Fail::Store(e)) => {
@@ -89,8 +183,9 @@ fn main() -> ExitCode {
     }
 }
 
+/// One fixed sentence: what was typed is never echoed.
 fn usage() -> ExitCode {
-    eprint!("{USAGE}");
+    eprintln!("secretant: wrong usage; run `secretant --help`");
     ExitCode::from(2)
 }
 
@@ -268,55 +363,27 @@ fn bundle_passphrase(
     }
 }
 
-fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
-    let mut store: Option<PathBuf> = None;
-    let mut how = How::Prompt;
-    let mut i = 0;
-    // Global options come first.
-    while i < args.len() && args[i].starts_with("--") {
-        match args[i].as_str() {
-            "--store" => {
-                store = Some(PathBuf::from(args.get(i + 1).ok_or(Fail::Usage)?));
-                i += 2;
-            }
-            "--passphrase-stdin" => {
-                how = How::Passphrase;
-                i += 1;
-            }
-            "--recovery-stdin" => {
-                how = How::Recovery;
-                i += 1;
-            }
-            "--os" => {
-                how = How::Os;
-                i += 1;
-            }
-            "--passphrase-env" => {
-                how = How::Env;
-                i += 1;
-            }
-            _ => return Err(Fail::Usage),
-        }
-    }
-    args.drain(..i);
-    if args.is_empty() {
-        return Err(Fail::Usage);
-    }
-    let path = store.or_else(default_store).ok_or(Fail::Usage)?;
-    let cmd = args.remove(0);
+fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
+    let how = if cli.passphrase_stdin {
+        How::Passphrase
+    } else if cli.recovery_stdin {
+        How::Recovery
+    } else if cli.os {
+        How::Os
+    } else if cli.passphrase_env {
+        How::Env
+    } else {
+        How::Prompt
+    };
+    let path = cli.store.or_else(default_store).ok_or(Fail::Usage)?;
     let mut input = Input(std::io::stdin());
 
-    match cmd.as_str() {
-        "init" => {
-            let mut want_recovery = false;
-            let mut want_os = false;
-            for a in &args {
-                match a.as_str() {
-                    "--recovery" => want_recovery = true,
-                    "--add-os" => want_os = true,
-                    _ => return Err(Fail::Usage),
-                }
-            }
+    let is_rotate = matches!(cli.command, Cmd::Rotate { .. });
+    match cli.command {
+        Cmd::Init {
+            recovery: want_recovery,
+            add_os: want_os,
+        } => {
             let pass = match how {
                 How::Passphrase => nonempty(input.line()?)?,
                 How::Env => env_passphrase()?,
@@ -342,65 +409,46 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        "put" | "rotate" => {
-            let [name] = args.as_slice() else {
-                return Err(Fail::Usage);
-            };
+        Cmd::Put { name } | Cmd::Rotate { name } => {
             let mut s = open(&path, &how, &mut input, ask)?;
-            if cmd == "rotate" {
-                s.describe(name)?;
+            if is_rotate {
+                s.describe(&name)?;
             }
             let value = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
                 ask.secret("Value: ").map_err(ask_fail)?
             } else {
                 input.rest()?
             };
-            let v = s.put(name, value, BTreeMap::new())?;
+            let v = s.put(&name, value, BTreeMap::new())?;
             println!("version {v}");
             Ok(ExitCode::SUCCESS)
         }
-        "get" => {
-            let (name, version) = match args.as_slice() {
-                [n] => (n, None),
-                [n, f, v] if f == "--version" => {
-                    (n, Some(v.parse::<u32>().map_err(|_| Fail::Usage)?))
-                }
-                _ => return Err(Fail::Usage),
-            };
+        Cmd::Get { name, version } => {
             let s = open(&path, &how, &mut input, ask)?;
             let value = match version {
-                Some(v) => s.get_version(name, v)?,
-                None => s.get(name)?,
+                Some(v) => s.get_version(&name, v)?,
+                None => s.get(&name)?,
             };
             let mut out = std::io::stdout().lock();
             out.write_all(value.expose())
                 .map_err(|_| Fail::Store(StoreError::Io))?;
             Ok(ExitCode::SUCCESS)
         }
-        "list" => {
-            if !args.is_empty() {
-                return Err(Fail::Usage);
-            }
+        Cmd::List => {
             let s = open(&path, &how, &mut input, ask)?;
             for n in s.list() {
                 println!("{n}");
             }
             Ok(ExitCode::SUCCESS)
         }
-        "backup" => {
-            let [dest] = args.as_slice() else {
-                return Err(Fail::Usage);
-            };
-            secretant::backup(&path, std::path::Path::new(dest))?;
+        Cmd::Backup { dest } => {
+            secretant::backup(&path, std::path::Path::new(&dest))?;
             println!("backup written");
             Ok(ExitCode::SUCCESS)
         }
-        "restore-test" => {
-            let [backup] = args.as_slice() else {
-                return Err(Fail::Usage);
-            };
+        Cmd::RestoreTest { backup } => {
             let sum = with_unlock(&how, &mut input, ask, |u| {
-                secretant::check_backup(std::path::Path::new(backup), u)
+                secretant::check_backup(std::path::Path::new(&backup), u)
             })?;
             println!(
                 "backup opens: {} entries, {} versions",
@@ -408,14 +456,9 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        "restore" => {
-            let (backup, replace) = match args.as_slice() {
-                [b] => (b, false),
-                [b, f] if f == "--replace" => (b, true),
-                _ => return Err(Fail::Usage),
-            };
+        Cmd::Restore { backup, replace } => {
             let sum = with_unlock(&how, &mut input, ask, |u| {
-                secretant::restore(std::path::Path::new(backup), &path, u, replace)
+                secretant::restore(std::path::Path::new(&backup), &path, u, replace)
             })?;
             println!(
                 "restored: {} entries, {} versions",
@@ -423,12 +466,7 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        "doctor" => {
-            let header_only = match args.as_slice() {
-                [] => false,
-                [f] if f == "--header-only" => true,
-                _ => return Err(Fail::Usage),
-            };
+        Cmd::Doctor { header_only } => {
             let findings = if header_only {
                 secretant::doctor(&path, None)
             } else {
@@ -452,49 +490,31 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 ExitCode::SUCCESS
             })
         }
-        "export" => {
-            let mut from_stdin = false;
-            let mut dest = None;
-            for a in &args {
-                match a.as_str() {
-                    "--bundle-passphrase-stdin" => from_stdin = true,
-                    _ if dest.is_none() => dest = Some(a),
-                    _ => return Err(Fail::Usage),
-                }
-            }
-            let dest = dest.ok_or(Fail::Usage)?;
+        Cmd::Export {
+            bundle: dest,
+            bundle_passphrase_stdin: from_stdin,
+        } => {
             let s = open(&path, &how, &mut input, ask)?;
             let bp = bundle_passphrase(from_stdin, true, &mut input, ask)?;
-            let mut bundle = FileStore::create(std::path::Path::new(dest), &bp)?;
+            let mut bundle = FileStore::create(std::path::Path::new(&dest), &bp)?;
             s.export_to(&mut bundle)?;
             println!("exported {} entries", s.list().len());
             Ok(ExitCode::SUCCESS)
         }
-        "import" => {
-            let mut from_stdin = false;
-            let mut apply = false;
-            let mut conflict = ImportConflict::Refuse;
-            let mut src = None;
-            let mut it = args.iter();
-            while let Some(a) = it.next() {
-                match a.as_str() {
-                    "--bundle-passphrase-stdin" => from_stdin = true,
-                    "--apply" => apply = true,
-                    "--conflict" => {
-                        conflict = match it.next().map(String::as_str) {
-                            Some("keep") => ImportConflict::Keep,
-                            Some("replace") => ImportConflict::Replace,
-                            _ => return Err(Fail::Usage),
-                        };
-                    }
-                    _ if src.is_none() => src = Some(a),
-                    _ => return Err(Fail::Usage),
-                }
-            }
-            let src = src.ok_or(Fail::Usage)?;
+        Cmd::Import {
+            bundle: src,
+            apply,
+            conflict,
+            bundle_passphrase_stdin: from_stdin,
+        } => {
+            let conflict = match conflict {
+                None => ImportConflict::Refuse,
+                Some(Conflict::Keep) => ImportConflict::Keep,
+                Some(Conflict::Replace) => ImportConflict::Replace,
+            };
             let mut s = open(&path, &how, &mut input, ask)?;
             let bp = bundle_passphrase(from_stdin, false, &mut input, ask)?;
-            let bundle = FileStore::open_with(std::path::Path::new(src), Unlock::Passphrase(&bp))?;
+            let bundle = FileStore::open_with(std::path::Path::new(&src), Unlock::Passphrase(&bp))?;
             if apply {
                 let r = s.apply_import(&bundle, conflict)?;
                 println!(
@@ -510,13 +530,10 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        "run" => {
-            let split = args.iter().position(|a| a == "--").ok_or(Fail::Usage)?;
-            let (names, rest) = args.split_at(split);
-            let command = &rest[1..];
-            let [list] = names else {
-                return Err(Fail::Usage);
-            };
+        Cmd::Run {
+            names: list,
+            command,
+        } => {
             let Some((program, program_args)) = command.split_first() else {
                 return Err(Fail::Usage);
             };
@@ -547,17 +564,14 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             ))
         }
         #[cfg(not(feature = "cloudflare"))]
-        "cloudflare" => Err(Fail::Text(
+        Cmd::Cloudflare { .. } => Err(Fail::Text(
             "this build has no Cloudflare support: build with --features cloudflare",
         )),
         #[cfg(feature = "cloudflare")]
-        "cloudflare" => {
-            let [mode, manifest] = args.as_slice() else {
-                return Err(Fail::Usage);
-            };
-            let (worker, token, mappings) = read_cf_manifest(manifest)?;
+        Cmd::Cloudflare { mode, manifest } => {
+            let (worker, token, mappings) = read_cf_manifest(&manifest)?;
             let s = open(&path, &how, &mut input, ask)?;
-            let mut ledger_name = std::ffi::OsString::from(manifest);
+            let mut ledger_name = std::ffi::OsString::from(&manifest);
             ledger_name.push(".ledger.json");
             let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;
             let cf_fail = |e: CloudflareError| match e {
@@ -574,8 +588,8 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 CloudflareError::Ledger => Fail::Text("the delivery ledger could not be written"),
             };
             let mut bad = false;
-            match mode.as_str() {
-                "plan" => {
+            match mode {
+                Mode::Plan => {
                     for (i, a) in secretant::cf::plan(&s, &ledger, &worker, &token, &mappings)
                         .map_err(cf_fail)?
                     {
@@ -587,12 +601,12 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                         println!("{} {word}", mappings[i].0);
                     }
                 }
-                "apply" => {
+                Mode::Apply => {
                     let n = secretant::cf::apply(&s, &mut ledger, &worker, &token, &mappings)
                         .map_err(cf_fail)?;
                     println!("sent {n} secret(s)");
                 }
-                "verify" => {
+                Mode::Verify => {
                     for (i, st) in secretant::cf::verify(&s, &ledger, &worker, &token, &mappings)
                         .map_err(cf_fail)?
                     {
@@ -606,7 +620,6 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                         println!("{} {word}", mappings[i].0);
                     }
                 }
-                _ => return Err(Fail::Usage),
             }
             Ok(if bad {
                 ExitCode::from(1)
@@ -614,18 +627,15 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 ExitCode::SUCCESS
             })
         }
-        "deliver" => {
-            let [mode, manifest] = args.as_slice() else {
-                return Err(Fail::Usage);
-            };
-            let placements = read_manifest(manifest)?;
+        Cmd::Deliver { mode, manifest } => {
+            let placements = read_manifest(&manifest)?;
             let s = open(&path, &how, &mut input, ask)?;
-            let mut ledger_name = std::ffi::OsString::from(manifest);
+            let mut ledger_name = std::ffi::OsString::from(&manifest);
             ledger_name.push(".ledger.json");
             let mut ledger = Ledger::open(PathBuf::from(ledger_name)).map_err(deliver_fail)?;
             let mut bad = false;
-            match mode.as_str() {
-                "plan" => {
+            match mode {
+                Mode::Plan => {
                     for (i, a) in secretant::plan(&s, &ledger, &placements) {
                         let word = match a {
                             Action::Create => "create",
@@ -635,7 +645,7 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                         println!("{} {word}", placements[i].name);
                     }
                 }
-                "apply" => {
+                Mode::Apply => {
                     for o in secretant::apply(&s, &mut ledger, &placements) {
                         match o.result {
                             Ok(v) => println!("{} placed version {v}", placements[o.index].name),
@@ -646,7 +656,7 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                         }
                     }
                 }
-                "verify" => {
+                Mode::Verify => {
                     for (i, st) in secretant::verify(&s, &ledger, &placements) {
                         let word = match st {
                             State::InSync => "in-sync",
@@ -660,7 +670,6 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                         println!("{} {word}", placements[i].name);
                     }
                 }
-                _ => return Err(Fail::Usage),
             }
             Ok(if bad {
                 ExitCode::from(1)
@@ -668,7 +677,6 @@ fn go(mut args: Vec<String>, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 ExitCode::SUCCESS
             })
         }
-        _ => Err(Fail::Usage),
     }
 }
 

@@ -632,3 +632,39 @@ fn an_empty_passphrase_is_refused_by_init_and_by_every_unlock() {
         }
     }
 }
+
+#[test]
+fn help_and_version_work_and_a_mistake_is_one_fixed_sentence() {
+    let r = Run::new();
+    for flag in ["--help", "-h"] {
+        let o = r.cmd(&[flag], "");
+        assert_eq!(o.status.code(), Some(0), "{flag}");
+        let out = text(&o.stdout);
+        assert!(out.contains("Usage") && out.contains("restore-test") && out.contains("deliver"));
+    }
+    let sub = r.cmd(&["put", "--help"], "");
+    assert_eq!(sub.status.code(), Some(0));
+    assert!(text(&sub.stdout).contains("Usage"));
+    for flag in ["--version", "-V"] {
+        let o = r.cmd(&[flag], "");
+        assert_eq!(o.status.code(), Some(0), "{flag}");
+        assert_eq!(
+            text(&o.stdout).trim(),
+            format!("secretant {}", env!("CARGO_PKG_VERSION"))
+        );
+    }
+    // No command, an unknown flag, an unknown command: exit 2, fixed sentence, nothing typed echoed.
+    for args in [
+        &[][..],
+        &["--no-such-flag-CANARYx"][..],
+        &["no-such-command-CANARYx"][..],
+    ] {
+        let o = r.cmd(args, "");
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        let err = text(&o.stderr);
+        assert!(
+            err.contains("wrong usage") && !err.contains("CANARYx"),
+            "{err}"
+        );
+    }
+}
