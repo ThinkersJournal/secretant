@@ -85,6 +85,42 @@ jobs:
           grep -qx minreq feature-tree.txt
           grep -qx rustls feature-tree.txt
 
+  # The crate declares `rust-version` in Cargo.toml (the newest minimum among its dependencies, found by building on it). This job builds
+  # on exactly that version, read from Cargo.toml so the promise and the check cannot drift: default features and all features,
+  # tests and examples included. It fails if Cargo.toml declares none.
+  msrv:
+    name: Builds on the declared minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the declared minimum
+        id: msrv
+        run: |
+          set -o pipefail
+          v=$(sed -n 's/^rust-version *= *"\([0-9][0-9.]*\)".*//p' Cargo.toml | head -n 1)
+          if [ -z "$v" ]; then
+            echo "::error::Cargo.toml declares no rust-version"
+            exit 1
+          fi
+          echo "declared minimum: $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Install that Rust
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "$MSRV" --profile minimal
+
+      - name: cargo check (default features)
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" check --locked --all-targets
+
+      - name: cargo check (all features)
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" check --locked --all-targets --all-features
+
   deny:
     name: cargo deny (advisories, licences, bans, sources)
     runs-on: ubuntu-latest
