@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! The installer's Secrets step (ROADMAP row 8b; design in `docs/INSTALLER-STEPS.md` 4.2).
+//! The installer's Secrets step (the second of the installer's three steps).
 //!
 //! **Pre-1.0: this module may change in 0.2.** It ships in 0.1.0 because the Humboldt installer is its first user.
 //!

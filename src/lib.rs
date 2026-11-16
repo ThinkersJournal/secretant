@@ -4,13 +4,13 @@
 #[cfg(feature = "cloudflare")]
 mod cloudflare;
 mod deliver;
-/// The installer step library (ROADMAP row 8).
+/// The installer's Store step: probe, plan, apply and read back.
 pub mod installer;
 mod maintain;
-/// The installer's Place step for files and environment files (ROADMAP row 8b).
+/// The installer's Place step for files and environment files.
 pub mod place_step;
 mod read;
-/// The installer's Secrets step (ROADMAP row 8b).
+/// The installer's Secrets step: asks for and stores the secrets.
 pub mod secrets_step;
 mod store;
 mod value;
