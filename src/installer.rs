@@ -283,3 +283,13 @@ pub fn read_back_store(path: &Path, unlock: Unlock<'_>) -> Result<StoreReport, I
         entries: u32::try_from(s.list().len()).unwrap_or(u32::MAX),
     })
 }
+
+/// What the installer must say in plain words before first use (`docs/DESIGN.md`
+/// 8.2). `{protection}` stands for what protects the store on this system: use
+/// [`plain_words`] to fill it ("Windows", "your keychain", or "a passphrase").
+pub const PLAIN_WORDS: &str = "Your secrets are kept on this computer, protected by {protection}. Nobody at Thinker's Journal can open them or reset them. If you lose both this computer and your recovery key, they cannot be recovered; you would create new ones with each service.";
+
+/// [`PLAIN_WORDS`] with `protection` filled in.
+pub fn plain_words(protection: &str) -> String {
+    PLAIN_WORDS.replace("{protection}", protection)
+}
