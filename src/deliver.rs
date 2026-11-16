@@ -454,7 +454,11 @@ mod tests {
         let r = rig();
         let ps = [r.file()];
         let mut l = r.ledger();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         let path = r.dir.path().join("out.secret");
         assert!(is_private(&path), "a delivered file must be owner-only");
         // loosen it by hand
@@ -476,7 +480,11 @@ mod tests {
         }
         assert_eq!(verify(&r.store, &l, &ps), vec![(0, State::LoosePerms)]);
         // apply repairs it
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         assert_eq!(verify(&r.store, &l, &ps), vec![(0, State::InSync)]);
     }
 
@@ -485,7 +493,11 @@ mod tests {
         let mut r = rig();
         let ps = [r.file(), r.env()];
         let mut l = r.ledger();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         r.rotate(V2);
         assert_eq!(
             verify(&r.store, &l, &ps),
@@ -505,7 +517,11 @@ mod tests {
         let r = rig();
         let ps = [r.file(), r.env()];
         let mut l = r.ledger();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         fs::write(r.dir.path().join("out.secret"), b"edited by hand").unwrap();
         fs::write(r.dir.path().join("app.env"), b"DATABASE_URL=other\n").unwrap();
         let rep = verify(&r.store, &l, &ps);
@@ -528,7 +544,11 @@ mod tests {
         let mut r = rig();
         let ps = [r.file(), r.env()];
         let mut l = r.ledger();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         r.rotate(V2);
         // Block the first target's temporary file with a directory.
         let block = r.dir.path().join("out.secret.tmp");
@@ -550,7 +570,11 @@ mod tests {
         assert!(!text.contains("out.secret") && !text.contains(V1));
         // Clear the block; the next apply completes it.
         fs::remove_dir(&block).unwrap();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         assert_eq!(verify(&r.store, &l, &ps)[0].1, State::InSync);
     }
 
@@ -561,7 +585,11 @@ mod tests {
         let path = r.dir.path().join("app.env");
         fs::write(&path, "A=1\nDATABASE_URL=old\nB=2\n").unwrap();
         let mut l = r.ledger();
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             format!("A=1\nDATABASE_URL={V1}\nB=2\n")
@@ -610,7 +638,11 @@ mod tests {
         assert_eq!(verify(&r.store, &l, &[p])[0].1, State::Unreadable);
         // the ledger after a real placement names the name, path and number, not the value
         let ps = [r.file()];
-        apply(&r.store, &mut l, &ps);
+        assert!(
+            apply(&r.store, &mut l, &ps)
+                .iter()
+                .all(|o| o.result.is_ok())
+        );
         let ledger_text = fs::read_to_string(r.dir.path().join("ledger.json")).unwrap();
         assert!(ledger_text.contains(NAME) && !ledger_text.contains(V1));
     }

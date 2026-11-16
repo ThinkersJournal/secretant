@@ -1430,7 +1430,7 @@ mod tests {
     fn wrong_passphrase_is_a_named_error() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("s.secretant");
-        new_store(&dir);
+        let _created = new_store(&dir);
         assert_eq!(
             FileStore::open(&path, &pass("nope")).err(),
             Some(StoreError::WrongPassphrase)
@@ -1527,7 +1527,7 @@ mod tests {
     fn a_hostile_file_cannot_demand_absurd_kdf_cost() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("s.secretant");
-        new_store(&dir);
+        let _created = new_store(&dir);
         let good = fs::read_to_string(&path).unwrap();
         let image: FileImage = serde_json::from_str(&good).unwrap();
         let bad = good.replacen(
@@ -1546,7 +1546,7 @@ mod tests {
     #[test]
     fn create_refuses_to_overwrite_and_open_reports_missing() {
         let dir = tempfile::tempdir().unwrap();
-        new_store(&dir);
+        let _created = new_store(&dir);
         let path = dir.path().join("s.secretant");
         assert_eq!(
             FileStore::create_with_params(&path, &pass("pw"), FAST).err(),
@@ -1698,7 +1698,7 @@ mod tests {
     fn no_wrap_that_opens_is_a_named_error_for_each_kind() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("s.secretant");
-        new_store(&dir); // passphrase wrap only
+        let _created = new_store(&dir); // passphrase wrap only
         assert_eq!(
             FileStore::open_with(&path, Unlock::Os).err(),
             Some(StoreError::OsWrapFailed)
