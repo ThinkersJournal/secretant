@@ -1,0 +1,77 @@
+# The architecture secretant declares for itself (CireSnave 2026-11-12: "start fixing the issues they find"; the ARC checks are
+# priority). Normative: coderipper's ARC rules report where the code disagrees. One crate, so the components are module groups
+# of `src/`; `lib.rs` is in no group.
+
+[architecture]
+style = "layered"
+
+# The value type and the store (the sealed file, its wraps and its key handling). Depend on nothing of ours; change least.
+[[architecture.component]]
+name = "foundation"
+paths = ["src/value.rs", "src/store.rs"]
+role = "policy"
+volatility = "stable"
+
+# What is built on the store: the read API for adapters, backup and doctor, delivery to files, and the installer's Store and
+# Secrets steps. They read the foundation and never each other.
+[[architecture.component]]
+name = "services"
+paths = ["src/read.rs", "src/maintain.rs", "src/deliver.rs", "src/installer.rs", "src/secrets_step.rs"]
+role = "policy"
+volatility = "stable"
+
+# Cloudflare Worker delivery: the one network adapter, behind the `cloudflare` feature. It reads delivery and the store.
+[[architecture.component]]
+name = "cloudflare"
+paths = ["src/cloudflare.rs"]
+role = "adapter"
+volatility = "volatile"
+
+# The installer's Place step: composes file delivery and, with the feature, the Cloudflare adapter.
+[[architecture.component]]
+name = "place"
+paths = ["src/place_step.rs"]
+role = "policy"
+
+# The command line. It uses the library by its public name, not by module path.
+[[architecture.component]]
+name = "cli"
+paths = ["src/main.rs", "src/prompt.rs"]
+role = "composition"
+
+# Bottom first: a component may depend on its own layer or any layer below it.
+[[architecture.layer]]
+name = "foundation"
+components = ["foundation"]
+
+[[architecture.layer]]
+name = "services"
+components = ["services"]
+
+[[architecture.layer]]
+name = "adapter"
+components = ["cloudflare"]
+
+[[architecture.layer]]
+name = "steps"
+components = ["place"]
+
+# ARC-009 (public surface grew since v0.0.2, the first tag): a first release and the five rows built since (read API, wraps,
+# backup/restore, delivery, installer steps) grow the surface on purpose; the check itself says it is low confidence for this.
+[[allow]]
+check = "ARC-009"
+file = "Cargo.toml"
+symbol = "secretant:surface"
+reason = "the surface grew from the 0.0.2 skeleton (a value type and one store) to the 0.1.0 candidate on purpose: the read API for adapters (row 3), the CLI-facing store operations, delivery, backup, and the installer step library (rows 3 to 8) are the product. Owner: secretant lane. Revisit at the 0.1.0 tag, which becomes the new base."
+
+# MOD-008 (a function that only passes its arguments on). Each is a deliberate seam, not a stray wrapper.
+[[allow]]
+check = "MOD-008"
+file = "src/place_step.rs"
+reason = "the installer step contract is four calls on every step (probe, plan, apply, read_back; docs/INSTALLER-STEPS.md 3). On the Place step the probe and the read-back are by design the same read of the targets, so each is named for the call the installer makes; the fingerprint compares the probe to the later read, which is only meaningful if both are the same function. Owner: secretant lane."
+
+[[allow]]
+check = "MOD-008"
+file = "src/store.rs"
+symbol = "is_private"
+reason = "the facade over the platform module `os`, whose two cfg'd bodies (Unix mode bits, Windows ACL) are chosen at compile time; callers in deliver and maintain name the facade so they carry no cfg. Owner: secretant lane."
