@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.32] — installer worked example and plain-words constant
+
+`secretant::installer::PLAIN_WORDS` and `plain_words(protection)`: the text of DESIGN 8.2 the installer shows before first use. `docs/INSTALLER-EXAMPLE.md` is the worked example; `tests/installer_example.rs` runs it end to end (store, recovery confirmation, secrets, place; a second run changes no file; no secret in anything shown, with a control) and checks the plain words against DESIGN 8.2 word for word and the document against the calls it names.
+
 ## [0.0.31] — installer Place step for a Cloudflare Worker
 
 New submodule `secretant::place_step::cloudflare` (feature `cloudflare`), row 8b completed: `probe_cloudflare`, `plan_cloudflare`, `apply_cloudflare`, `read_back_cloudflare`, the same four calls and fingerprint as the file Place step over `cf::plan/apply/verify`. A plan carries the probe it was made from, so `apply_cloudflare` refuses (and sends nothing) if the Worker's secrets or the store changed since; a no-op plan sends no request; all secrets go in one request and the ledger is written only after Cloudflare accepts it. Worker secrets are write-only, so the read-back says unset, stale or current by the ledger, never a value. Plans, reports and errors carry names, indexes, counts and classes only. Verified by `tests/place_cloudflare.rs` against the fake API (value only in the one write body and absent from every plan, report and read-back, with a control; no-op sends nothing; rotation sends only what changed; stale plan; refused token; rejected write leaves the ledger alone). Not published; no live Cloudflare run yet.
