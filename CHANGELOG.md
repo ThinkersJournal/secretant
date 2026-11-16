@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.2] — Changed
+
+The command line names where a bundle passphrase comes from with a small enum instead of two `bool` parameters (TYP-007); behaviour is unchanged and the existing `tests/cli.rs` bundle tests cover both paths. `tools/fresh-eyes-trial.sh` carries an SPDX line (SUP-016).
+
 ## [0.1.1] — Changed
 
 CI: the Portfolio job moves to CodeRipper 0.47.5 (workflow `c72a6e0`). The rule-id migration found nothing to rename (`.coderipper.toml` already uses numbered ids). No code change.

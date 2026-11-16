@@ -345,21 +345,26 @@ fn with_unlock<T>(
     Ok(r?)
 }
 
-/// The passphrase of a bundle: asked on the terminal (twice when new), or the
-/// next line of standard input with `--bundle-passphrase-stdin`.
+/// Where a bundle's passphrase comes from.
+enum BundleSource {
+    /// The next line of standard input (`--bundle-passphrase-stdin`).
+    Stdin,
+    /// Asked on the terminal, twice, for a bundle being made.
+    NewOnTerminal,
+    /// Asked on the terminal, once, for a bundle being opened.
+    ExistingOnTerminal,
+}
+
+/// The passphrase of a bundle, from where `source` says.
 fn bundle_passphrase(
-    from_stdin: bool,
-    new: bool,
+    source: BundleSource,
     input: &mut Input,
     ask: &mut dyn Ask,
 ) -> Result<SecretValue, Fail> {
-    if from_stdin {
-        return nonempty(input.line()?);
-    }
-    if new {
-        prompt::new_bundle_passphrase(ask).map_err(ask_fail)
-    } else {
-        prompt::bundle_passphrase(ask).map_err(ask_fail)
+    match source {
+        BundleSource::Stdin => nonempty(input.line()?),
+        BundleSource::NewOnTerminal => prompt::new_bundle_passphrase(ask).map_err(ask_fail),
+        BundleSource::ExistingOnTerminal => prompt::bundle_passphrase(ask).map_err(ask_fail),
     }
 }
 
@@ -496,7 +501,12 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
             bundle_passphrase_stdin: from_stdin,
         } => {
             let s = open(&path, &how, &mut input, ask)?;
-            let bp = bundle_passphrase(from_stdin, true, &mut input, ask)?;
+            let source = if from_stdin {
+                BundleSource::Stdin
+            } else {
+                BundleSource::NewOnTerminal
+            };
+            let bp = bundle_passphrase(source, &mut input, ask)?;
             let mut bundle = FileStore::create(std::path::Path::new(&dest), &bp)?;
             s.export_to(&mut bundle)?;
             println!("exported {} entries", s.list().len());
@@ -514,7 +524,12 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                 Some(Conflict::Replace) => ImportConflict::Replace,
             };
             let mut s = open(&path, &how, &mut input, ask)?;
-            let bp = bundle_passphrase(from_stdin, false, &mut input, ask)?;
+            let source = if from_stdin {
+                BundleSource::Stdin
+            } else {
+                BundleSource::ExistingOnTerminal
+            };
+            let bp = bundle_passphrase(source, &mut input, ask)?;
             let bundle = FileStore::open_with(std::path::Path::new(&src), Unlock::Passphrase(&bp))?;
             if apply {
                 let r = s.apply_import(&bundle, conflict)?;

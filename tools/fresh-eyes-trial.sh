@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Fresh-eyes trial (CIRESNAVE-EXPECTATIONS 6.24): can a person who never saw the
 # crate get from `cargo add` to the README's ten-line example, using only the
 # README and rustdoc, and how long does it take?
