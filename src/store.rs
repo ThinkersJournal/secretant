@@ -36,6 +36,7 @@ const SALT_LEN: usize = 16;
 
 /// Why an operation failed. Never carries a name, a value or file text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StoreError {
     /// No entry with that name.
     NotFound,
@@ -72,24 +73,24 @@ pub enum StoreError {
 impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            StoreError::NotFound => "no such entry",
-            StoreError::WrongPassphrase => "the passphrase did not open the store",
-            StoreError::Corrupt => "the store file is damaged or was altered",
-            StoreError::UnsupportedFormat => "the store file has a format this version cannot read",
-            StoreError::WrongRecoveryKey => "the recovery key did not open the store",
+            StoreError::NotFound => "no such entry; list the names to see what is there",
+            StoreError::WrongPassphrase => "the passphrase did not open the store; check it, or use the recovery key",
+            StoreError::Corrupt => "the store file is damaged or was altered; restore a backup",
+            StoreError::UnsupportedFormat => "the store file has a format this version cannot read; use a newer version of SecretAnt",
+            StoreError::WrongRecoveryKey => "the recovery key did not open the store; check it is typed exactly as it was shown",
             StoreError::OsWrapFailed => {
-                "the operating system could not open the store for this user"
+                "the operating system could not open the store for this user; sign in as the user who created it, or use the passphrase"
             }
-            StoreError::AlreadyExists => "a store already exists at that path",
-            StoreError::NoSuchStore => "no store at that path",
+            StoreError::AlreadyExists => "a store already exists at that path; choose another path, or open that one",
+            StoreError::NoSuchStore => "no store at that path; check the path, or create one with init",
             StoreError::Conflict => {
                 "the import would overwrite existing names; choose to keep or replace them"
             }
-            StoreError::EmptyPassphrase => "an empty passphrase is not allowed",
-            StoreError::DuplicateWrap => "that passphrase already opens the store",
-            StoreError::LastWrap => "the last way to open the store cannot be removed",
-            StoreError::BadName => "the name is empty or contains a control character",
-            StoreError::Io => "a file operation failed",
+            StoreError::EmptyPassphrase => "an empty passphrase is not allowed; choose a passphrase",
+            StoreError::DuplicateWrap => "that passphrase already opens the store; choose a different one",
+            StoreError::LastWrap => "the last way to open the store cannot be removed; add another way first",
+            StoreError::BadName => "the name is empty or contains a control character; use printable characters",
+            StoreError::Io => "a file operation failed; check the path and its permissions",
         })
     }
 }
@@ -132,6 +133,7 @@ pub trait Store {
 
 /// What to do with a name that is in both the store and an import.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ImportConflict {
     /// Stop before writing anything.
     Refuse,
@@ -1204,6 +1206,40 @@ mod tests {
 
     fn new_store(dir: &tempfile::TempDir) -> FileStore {
         FileStore::create_with_params(dir.path().join("s.secretant"), &pass("pw"), FAST).unwrap()
+    }
+
+    #[test]
+    fn every_error_class_says_what_to_do_next_and_names_nothing() {
+        use StoreError::*;
+        let all = [
+            NotFound,
+            WrongPassphrase,
+            Corrupt,
+            UnsupportedFormat,
+            WrongRecoveryKey,
+            OsWrapFailed,
+            AlreadyExists,
+            NoSuchStore,
+            Conflict,
+            EmptyPassphrase,
+            DuplicateWrap,
+            LastWrap,
+            BadName,
+            Io,
+        ];
+        for e in all {
+            let text = e.to_string();
+            // a sentence with a clause after the class: "what happened; what to do"
+            assert!(text.contains("; "), "no next step in: {text}");
+        }
+        for e in [
+            crate::ReadError::NotFound,
+            crate::ReadError::Denied,
+            crate::ReadError::Unreachable,
+            crate::ReadError::TimedOut,
+        ] {
+            assert!(e.to_string().contains(": "), "no next step in: {e}");
+        }
     }
 
     #[test]

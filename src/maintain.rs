@@ -87,6 +87,7 @@ pub fn restore(
 
 /// How serious a finding is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Level {
     /// Worth knowing.
     Info,
@@ -98,6 +99,7 @@ pub enum Level {
 
 /// What `doctor` looked at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Check {
     /// The file is a store of a format this version reads.
     Readable,

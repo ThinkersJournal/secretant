@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The installer's Store step (ROADMAP row 8; design in `docs/INSTALLER-STEPS.md`).
 //!
+//! **Pre-1.0: this module may change in 0.2.** It ships in 0.1.0 because the Humboldt installer is its first user.
+//!
 //! `probe`, `plan`, `apply`, `read_back`, as the Humboldt installer's own drivers
 //! do. The library never asks, prints or logs: the installer shows the recovery
 //! key and takes the typed-back confirmation. Everything here carries paths,
@@ -18,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 /// Why a step could not go on. A class only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum InstallError {
     /// A store is already there and the plan was to create one.
     Exists,
@@ -85,6 +88,7 @@ fn sibling(path: &Path, suffix: &str) -> PathBuf {
 
 /// What is at the store path right now.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StoreProbe {
     /// Nothing there.
     Absent,
@@ -113,6 +117,7 @@ pub fn probe_store(path: &Path) -> StoreProbe {
 
 /// What the step will do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StoreAction {
     /// Create a store: passphrase wrap, recovery wrap, and an OS-bound wrap if asked.
     Create {
@@ -177,6 +182,7 @@ pub struct PendingStore {
 
 /// The result of `apply`.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum StoreApplied {
     /// Nothing was written (the person's store is used as it is).
     Unchanged,

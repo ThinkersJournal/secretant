@@ -39,7 +39,7 @@ fn begin(path: &Path) -> (secretant::installer::PendingStore, String) {
             store,
             String::from_utf8(recovery_key.expose().to_vec()).unwrap(),
         ),
-        StoreApplied::Unchanged => panic!("expected a pending store"),
+        _ => panic!("expected a pending store"),
     }
 }
 

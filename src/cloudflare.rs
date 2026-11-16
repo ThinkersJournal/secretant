@@ -32,6 +32,7 @@ pub const MAX_BULK: usize = 100;
 
 /// Why a Cloudflare step failed. A class only: no response text, name or value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CloudflareError {
     /// The token was refused (401 or 403): wrong, expired, or lacking scope.
     Denied,
