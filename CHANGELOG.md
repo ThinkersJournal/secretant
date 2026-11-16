@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.37] — Added
+
+`tools/fresh-eyes-trial.sh`: sets up the fresh-eyes trial (EXPECTATIONS 6.24). It builds the crate as `cargo package` ships it, makes a fresh project with only the README and rustdoc, prints the brief and times the run; `finish` runs the result. First run (0.0.36, blind Sonnet agent): PASS, one stumble, reported separately.
+
 ## [0.0.36] — CI builds on the declared minimum Rust version
 
 New CI job "Builds on the declared minimum Rust version": it reads `rust-version` from `Cargo.toml` (so the promise and the check cannot drift), installs that toolchain and runs `cargo check --locked --all-targets` with default features and with all features; it fails if `Cargo.toml` declares none. No code change. Verified locally on 1.88.0 (both checks pass).
