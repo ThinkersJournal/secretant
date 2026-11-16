@@ -1,6 +1,7 @@
 # The architecture secretant declares for itself (CireSnave 2026-11-12: "start fixing the issues they find"; the ARC checks are
 # priority). Normative: coderipper's ARC rules report where the code disagrees. One crate, so the components are module groups
-# of `src/`; `lib.rs` is in no group.
+# of `src/`; `lib.rs` is in no group, and neither is the command line (`main.rs`, `prompt.rs`: a second crate root that
+# uses the library by its public name).
 
 [architecture]
 style = "layered"
@@ -32,12 +33,6 @@ volatility = "volatile"
 name = "place"
 paths = ["src/place_step.rs"]
 role = "policy"
-
-# The command line. It uses the library by its public name, not by module path.
-[[architecture.component]]
-name = "cli"
-paths = ["src/main.rs", "src/prompt.rs"]
-role = "composition"
 
 # Bottom first: a component may depend on its own layer or any layer below it.
 [[architecture.layer]]
