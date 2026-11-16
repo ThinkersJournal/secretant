@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.34] — architecture declared for the ARC checks
+
+`.coderipper.toml` declares secretant's architecture (module groups foundation, services, cloudflare, place, cli in four layers) so the ARC checks run instead of reporting "not run"; the code already obeys it (ARC-001 judged 6 edges, ARC-002 found 0 cycles, ARC-005 reported 0). The ARC-009 surface finding (growth since the 0.0.2 skeleton) and the five MOD-008 pass-through Info findings are waived with their reasons: the installer step contract's four calls, and the platform facade. Cargo.lock is updated to the newest compatible versions (cc, const-oid, errno, rustls-webpki; the dependency-freshness findings). No code changes.
+
 ## [0.0.33] — command-line basics (clap), tests use what they call
 
 The `secretant` command line is parsed by `clap` (CodeRipper OPS-012) instead of by hand: `--help` and `-h` (also per command) print the help and exit 0, `--version` and `-V` print `secretant VERSION` and exit 0 (OPS-011); a missing command, an unknown flag or command, or a stray argument exits 2 with one fixed sentence that never echoes what was typed (a value given as an argument is still refused and never shown). Unlock options may now come anywhere on the line; if several are given, `--passphrase-stdin`, `--recovery-stdin`, `--os`, `--passphrase-env` win in that order. Commands, arguments, output and exit codes are otherwise as before, checked by the existing `tests/cli.rs` and a new test for help, version and the fixed usage sentence. The tests in `deliver.rs` and `store.rs` that called `apply` and `new_store` and dropped the result now check it (the two unused-return-values findings). Adds the dependency `clap` (no default features; no network or TLS code).
