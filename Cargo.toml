@@ -1,6 +1,6 @@
 [package]
 name = "secretant"
-version = "0.0.36"
+version = "0.0.37"
 edition = "2024"
 description = "A person's or school's own encrypted secret store: a read API for programs, a command line, and delivery to files and Cloudflare Workers."
 keywords = ["secrets", "secret-store", "encryption", "vault", "cli"]
