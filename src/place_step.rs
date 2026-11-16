@@ -2,6 +2,8 @@
 //! The installer's Place step for files and environment files (ROADMAP row 8b,
 //! second half; design in `docs/INSTALLER-STEPS.md` 4.3).
 //!
+//! **Pre-1.0: this module may change in 0.2.** It ships in 0.1.0 because the Humboldt installer is its first user.
+//!
 //! A thin step over the delivery functions (`plan`, `apply`, `verify`): the same four calls as the other steps
 //! (`probe`, `plan`, `apply`, `read_back`), plus the fingerprint that makes
 //! `apply` refuse a plan whose situation has changed. It never asks, prints or
@@ -14,6 +16,7 @@ use std::fmt;
 
 /// Why the step could not go on. A class only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PlaceError {
     /// A target or the store changed since the plan was made: plan again.
     StalePlan,
@@ -135,6 +138,7 @@ pub mod cloudflare {
 
     /// Why the step could not go on. A class only.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[non_exhaustive]
     pub enum CloudflarePlaceError {
         /// The Worker or the store changed since the plan was made: plan again.
         StalePlan,

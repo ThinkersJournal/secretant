@@ -3,6 +3,23 @@
 Written 2026-11-12 by the SecretAnt lane at the PM's request. **The lane does not publish.** The PM decides the date and runs the publish and the tag.
 Facts below are at `origin/main` 9404e56 plus the open PRs #11 (row 6), #13 (`SecretReader::list`), #14 (no-echo prompt) and #15 (patent sweep); each "not done" is a blocker until it is done or ruled otherwise. The PM answered the six questions of section 11 on 2026-11-12; the sections below say where each answer landed.
 
+## Status at origin/main after #28 (2026-11-16)
+
+Supersedes the "not done" marks below where they differ. Rows 1 to 8 are all on main (not only 1 to 6): backup, restore, `doctor`, export/import and the installer step library ship in 0.1.0, the installer modules marked pre-1.0 (may change in 0.2). The PM reviewed this list on 2026-11-16.
+
+| Item | State |
+|---|---|
+| Crate description, README status, Cloudflare "fake-API tested only" line | done (this PR) |
+| README ten-line example, compiled and run as a doc test | done (this PR) |
+| `#[non_exhaustive]` on the public error, state and outcome enums | done (this PR; breaking, pre-1.0) |
+| Package contents (`exclude`), keywords, categories, `rust-version = "1.88"` (builds on 1.88.0), docs.rs all features | done (this PR); `cargo package` builds from the packaged files |
+| Error sentences say what to do next | done for `StoreError` and `ReadError` (this PR, a test per class) |
+| HTTP client behind a feature, default build 50 packages in CI | done (#16, required check) |
+| `SecretReader::list`, hidden-prompt passphrase entry | done (#13, #14); the manual terminal check is the PM's |
+| Architecture declared for the ARC checks, dependencies current | done (#28) |
+| Live Cloudflare run, or ship with the limit stated | PM; README states the limit |
+| SEC-002 ruling, patent-database search or CireSnave's decision, fresh-eyes trial, consumer verification (ConfigurAnt adapter, WebHostAnt C7b), publish, tag `v0.1.0` | PM |
+
 ## 1. What 0.1.0 is
 
 ROADMAP rows 1 to 6: `SecretValue`, the encrypted file store, three ways to open it (passphrase, recovery text, Windows user account), the read API for

@@ -2,10 +2,17 @@
 name = "secretant"
 version = "0.0.33"
 edition = "2024"
-description = "Placeholder: SecretAnt, secrets handling. Not yet released."
+description = "A person's or school's own encrypted secret store: a read API for programs, a command line, and delivery to files and Cloudflare Workers."
+keywords = ["secrets", "secret-store", "encryption", "vault", "cli"]
+categories = ["cryptography", "command-line-utilities", "authentication"]
+exclude = [".github/", "tools/", "changelog.d/", "HANDOFF.md", "ROADMAP.md", ".coderipper.toml", "deny.toml", "docs/HUMBOLDT-CHANGE-REQUEST.md", "docs/PUBLISH-0.1.0.md", "docs/PATENT-SWEEP.md"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ThinkersJournal/secretant"
 readme = "README.md"
+rust-version = "1.88"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 # Off by default: a store consumer pulls no HTTP or TLS stack. `cloudflare` adds Cloudflare Worker secret delivery

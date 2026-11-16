@@ -62,6 +62,7 @@ pub struct Placement {
 
 /// Why a delivery step failed. A class only: no name, path or value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeliverError {
     /// The store refused (missing name, and so on).
     Store(StoreError),
@@ -92,6 +93,7 @@ impl std::error::Error for DeliverError {}
 
 /// What a placement's target holds, compared with the store's latest version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum State {
     /// Holds the latest value, and the file is owner-only.
     InSync,
@@ -109,6 +111,7 @@ pub enum State {
 
 /// One line of a plan: what `apply` would do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Action {
     /// The target is absent; `apply` creates it.
     Create,

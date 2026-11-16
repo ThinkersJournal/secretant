@@ -51,6 +51,7 @@ impl fmt::Debug for ReadConfig {
 
 /// Why a read failed. Class only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ReadError {
     /// The store has no such entry.
     NotFound,
@@ -66,10 +67,12 @@ pub enum ReadError {
 impl fmt::Display for ReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            ReadError::NotFound => "not found",
-            ReadError::Denied => "access denied",
-            ReadError::Unreachable => "store unreachable",
-            ReadError::TimedOut => "timed out",
+            ReadError::NotFound => "not found: no entry has that name; list the names",
+            ReadError::Denied => "access denied: check the passphrase, recovery key or user",
+            ReadError::Unreachable => {
+                "store unreachable: check the path and that the file is readable"
+            }
+            ReadError::TimedOut => "timed out: try again, or allow more time",
         })
     }
 }

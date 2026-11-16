@@ -480,6 +480,7 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                     Level::Info => "ok  ",
                     Level::Warn => "warn",
                     Level::Fail => "FAIL",
+                    _ => "????",
                 };
                 println!("{tag} {}", f.hint);
                 worst = worst.max(f.level);
@@ -586,6 +587,7 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                     Fail::Text("a name or value cannot be sent to a Worker")
                 }
                 CloudflareError::Ledger => Fail::Text("the delivery ledger could not be written"),
+                _ => Fail::Text("Cloudflare delivery failed"),
             };
             let mut bad = false;
             match mode {
@@ -597,6 +599,7 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                             Action::Create => "create",
                             Action::Update => "update",
                             Action::Unchanged => "unchanged",
+                            _ => "unknown",
                         };
                         println!("{} {word}", mappings[i].0);
                     }
@@ -641,6 +644,7 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                             Action::Create => "create",
                             Action::Update => "update",
                             Action::Unchanged => "unchanged",
+                            _ => "unknown",
                         };
                         println!("{} {word}", placements[i].name);
                     }
@@ -665,6 +669,7 @@ fn go(cli: Cli, ask: &mut dyn Ask) -> Result<ExitCode, Fail> {
                             State::Missing => "missing",
                             State::LoosePerms => "loose-permissions",
                             State::Unreadable => "unreadable",
+                            _ => "unknown",
                         };
                         bad |= st != State::InSync;
                         println!("{} {word}", placements[i].name);
@@ -685,6 +690,7 @@ fn deliver_fail(e: DeliverError) -> Fail {
         DeliverError::Store(s) => Fail::Store(s),
         DeliverError::Io => Fail::Text("a target could not be read or written"),
         DeliverError::Unsupported => Fail::Text("the value does not fit that kind of target"),
+        _ => Fail::Text("delivery failed"),
     }
 }
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The installer's Secrets step (ROADMAP row 8b; design in `docs/INSTALLER-STEPS.md` 4.2).
 //!
+//! **Pre-1.0: this module may change in 0.2.** It ships in 0.1.0 because the Humboldt installer is its first user.
+//!
 //! `probe`, `plan`, `apply`, `read_back`. The step puts a product's secrets into
 //! the person's store: a value the caller hands over (**given**) or a random one
 //! the library draws (**generated**, never returned). It never asks, prints or
@@ -17,6 +19,7 @@ use std::fmt;
 
 /// How a generated value is written as text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Encoding {
     /// Standard base64 with `=` padding (what `TOTP_ENCRYPTION_KEY` takes).
     Base64,
@@ -49,6 +52,7 @@ pub struct SecretRequest {
 
 /// What the step will do for one name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SecretAction {
     /// The name is not in the store: add it.
     Add,
@@ -60,6 +64,7 @@ pub enum SecretAction {
 
 /// Why the step could not go on. A class only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SecretsError {
     /// The store changed since the plan was made: plan again.
     StalePlan,
