@@ -8,6 +8,17 @@ of opening the store and the secrets are gone.
 
 ## Ten lines
 
+Add the crate, and `tempfile` too: the example keeps its store in a throwaway directory (a real program would not need `tempfile`).
+
+```sh
+cargo add secretant
+cargo add tempfile
+```
+
+`cargo add` may print `Features: - cloudflare`: that lists the optional Cloudflare feature, which stays **off** unless you ask for it (`cargo add secretant --features cloudflare`).
+
+The two lines starting `# ` below are hidden on rendered pages; they wrap the example in `fn main() -> Result<(), Box<dyn std::error::Error>>` and create that directory.
+
 ```rust
 use secretant::{FileStore, KdfParams, ReadConfig, ReadUnlock, SecretReader, SecretValue, Store};
 use std::{collections::BTreeMap, time::Duration};
