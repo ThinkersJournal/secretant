@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0] — **BREAKING**: first release with functionality
+
+The first SecretAnt release that does anything. **Breaking** relative to the 0.0.x placeholder line: the public error, state and outcome enums are `#[non_exhaustive]` (a `match` on one needs a wildcard arm).
+
+- `SecretValue` (no `Display`, `Clone` or `Serialize`; `Debug` shows nothing; wiped on drop), `FileStore` (XChaCha20-Poly1305 under a random data key; passphrase (Argon2id), recovery-key and Windows user-account wraps open the same key; atomic writes with one previous generation; owner-only file), `SecretReader` (open, get, list; four error classes and a timeout on every call).
+- Backup, restore, restore-test, `doctor`, export and import bundles; delivery plan, apply and verify to files and environment files with a ledger; the `secretant` command line (clap).
+- The installer step library (`installer`, `secrets_step`, `place_step`), pre-1.0: may change in 0.2.
+- Cloudflare Worker delivery behind the off-by-default `cloudflare` feature: tested against a fake of the documented API only, **not run against the live service**. The default build has 50 packages and no HTTP or TLS crate.
+- Not in 0.1.0: audit, macOS and Linux OS-bound wraps, a web interface, remote vaults. See the README.
+- Minimum Rust version 1.88, checked in CI. A new developer gets from `cargo add` to the README example in under a minute (fresh-eyes trial, 35 s on 0.0.36).
+
 ## [0.0.38] — Changed
 
 README: the ten-line example now shows its `cargo add tempfile` step and what the hidden lines are, and explains the `Features: - cloudflare` line `cargo add` prints. Rustdoc no longer cites ROADMAP rows or `docs/INSTALLER-STEPS.md`. Found by the first fresh-eyes trial; verified by a second.
