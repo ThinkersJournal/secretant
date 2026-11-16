@@ -446,6 +446,50 @@ fn a_damaged_backup_fails_restore_test_and_restore_loudly() {
 }
 
 #[test]
+fn a_truncated_backup_or_bundle_fails_loudly_and_changes_nothing() {
+    let r = Run::new();
+    assert!(r.cmd(&["init"], "").status.success());
+    assert!(r.cmd(&["put", NAME], VALUE).status.success());
+    let backup = r._dir.path().join("backup.json");
+    let bundle = r._dir.path().join("bundle.json");
+    let (backup_s, bundle_s) = (backup.to_str().unwrap(), bundle.to_str().unwrap());
+    assert!(r.cmd(&["backup", backup_s], "").status.success());
+    let ex = r.cmd(
+        &["export", bundle_s, "--bundle-passphrase-stdin"],
+        &format!(
+            "{BUNDLE_PASS}
+"
+        ),
+    );
+    assert!(ex.status.success());
+
+    for path in [&backup, &bundle] {
+        let full = std::fs::read(path).unwrap();
+        for keep in [0, 1, full.len() / 2, full.len() - 1] {
+            std::fs::write(path, &full[..keep]).unwrap();
+            let p = path.to_str().unwrap();
+            let before = std::fs::read(&r.store).unwrap();
+            let out = if path == &backup {
+                let t = r.cmd(&["restore-test", p], "");
+                assert_eq!(t.status.code(), Some(1), "restore-test, kept {keep}");
+                r.cmd(&["restore", p, "--replace"], "")
+            } else {
+                r.cmd(
+                    &["import", p, "--bundle-passphrase-stdin", "--apply"],
+                    &format!(
+                        "{BUNDLE_PASS}
+"
+                    ),
+                )
+            };
+            assert_eq!(out.status.code(), Some(1), "kept {keep} bytes");
+            no_canary(&out);
+            assert_eq!(before, std::fs::read(&r.store).unwrap());
+        }
+    }
+}
+
+#[test]
 fn doctor_reports_in_fixed_sentences_and_fails_on_a_missing_store() {
     let r = Run::new();
     let missing = r.cmd(&["doctor", "--header-only"], "");
