@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.38] — Changed
+
+README: the ten-line example now shows its `cargo add tempfile` step and what the hidden lines are, and explains the `Features: - cloudflare` line `cargo add` prints. Rustdoc no longer cites ROADMAP rows or `docs/INSTALLER-STEPS.md`. Found by the first fresh-eyes trial; verified by a second.
+
 ## [0.0.37] — Added
 
 `tools/fresh-eyes-trial.sh`: sets up the fresh-eyes trial (EXPECTATIONS 6.24). It builds the crate as `cargo package` ships it, makes a fresh project with only the README and rustdoc, prints the brief and times the run; `finish` runs the result. First run (0.0.36, blind Sonnet agent): PASS, one stumble, reported separately.
