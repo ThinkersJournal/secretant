@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.1] — Changed
+
+CI: the Portfolio job moves to CodeRipper 0.47.5 (workflow `c72a6e0`). The rule-id migration found nothing to rename (`.coderipper.toml` already uses numbered ids). No code change.
+
 ## [0.1.0] — **BREAKING**: first release with functionality
 
 The first SecretAnt release that does anything. **Breaking** relative to the 0.0.x placeholder line: the public error, state and outcome enums are `#[non_exhaustive]` (a `match` on one needs a wildcard arm).
