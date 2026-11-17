@@ -11,7 +11,7 @@ Rewritten 2026-11-16T18:30Z by the lane. Current state only; history is in git.
 - webhostant C7b needs: `SecretValue` unchanged, `SecretReader::{open(ReadConfig),get,list}`; consumers need a wildcard arm on the `#[non_exhaustive]` enums.
 - Stale worktrees (clean before removing): secretant-wt-lane (old HANDOFF), secretant-wt-docs2 (this branch), secretant-wt-row1-store, secretant-wt-docs, secretant-wt-design.
 
-WAIT: pm-publish-0.1.x | check: curl -s https://crates.io/api/v1/crates/secretant -A secretant-lane | python -c "import sys,json;print(json.load(sys.stdin)['crate']['max_version'])" | wake: 2026-11-17T12:00:00Z
+WAIT: pm-publish-0.1.x | check: gh api repos/ThinkersJournal/secretant/tags --jq .[].name | wake: 2026-11-17T12:00:00Z
 
 ## Tasks held
 1. Nothing unblocked. Rows 9 (no test env), 10 (needs ConfigurAnt on crates.io), 11 (needs RedactAnt/AuditAnt) stay blocked. Do not invent work; ask the PM. If asked: re-run the fresh-eyes trial at the version to publish (`tools/fresh-eyes-trial.sh`).
