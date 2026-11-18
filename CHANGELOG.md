@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.5] — Changed
+
+README no longer names a release number in its status line or headings, and its known-gaps list says the hidden-prompt (no echo) entry is not tested through a real terminal on Windows or WSL. `.coderipper.toml` declares the volatile names (`minreq`, `crate::cloudflare`) and the composition root (`src/main.rs`), and says `none` for an API budget, owned data and pure components, each with the reason read from the code, so ARC-003, ARC-006, ARC-007, ARC-012 and EFX-001 run instead of reading "not run". One CHANGELOG line for 0.0.3 is reworded so the secret scanner stops matching it in the current tree. Checked by running those five rules with coderipper 0.47.13 (0 findings, all ran) and gitleaks 8.30.1 in dir mode (0 findings). No code change.
+
 ## [0.1.4] — Changed
 
 HANDOFF.md rewritten to current state (no code change).
@@ -129,7 +133,7 @@ The `secretant` program (`src/main.rs`): `init` (optional recovery key shown onc
 
 ## [0.0.3]
 
-- `Store` trait and `FileStore` (ROADMAP row 1, second slice): one JSON file; random data key, XChaCha20-Poly1305; the key wrapped by an Argon2id passphrase wrap (wrap list ready for more); put/get/get_version/list/describe with versions and non-secret metadata; atomic write keeping one previous generation (`.prev`); errors carry a class and no text. Canary tests (the leak mutation is caught), every flipped ciphertext byte fails, hostile KDF costs refused. Not published.
+- `Store` trait and `FileStore` (ROADMAP row 1, second slice): one JSON file; XChaCha20-Poly1305 encryption under a random data key, which is wrapped by an Argon2id passphrase wrap (wrap list ready for more); put/get/get_version/list/describe with versions and non-secret metadata; atomic write keeping one previous generation (`.prev`); errors carry a class and no text. Canary tests (the leak mutation is caught), every flipped ciphertext byte fails, hostile KDF costs refused. Not published.
 
 ## [0.0.2]
 

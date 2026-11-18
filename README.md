@@ -1,6 +1,6 @@
 # SecretAnt
 
-One place, controlled by its owner, where a person or school keeps their secrets: an encrypted file store with versions, a read API for programs, a command line, and delivery of values to files, environment files and (feature `cloudflare`) Cloudflare Workers. Status: pre-1.0; this is 0.1.0, the first release with functionality.
+One place, controlled by its owner, where a person or school keeps their secrets: an encrypted file store with versions, a read API for programs, a command line, and delivery of values to files, environment files and (feature `cloudflare`) Cloudflare Workers. Status: pre-1.0; the first line of releases with functionality.
 
 **Same-user limit, stated first:** SecretAnt keeps a store file private to its owner and encrypted at rest. It does not defend against another
 program running as the same user: such a program can do what SecretAnt's own read API does. It also has no recovery path of ours: lose every way
@@ -49,7 +49,7 @@ secretant run API_TOKEN -- my-program   # the value is in the program's environm
 
 `secretant --help` lists every command: `init put rotate get list run backup restore-test restore doctor export import deliver cloudflare`.
 
-## What is in 0.1.0
+## What is in it
 
 - `SecretValue`: no `Display`, `Clone` or `Serialize`, `Debug` shows nothing, wiped on drop.
 - `FileStore`: XChaCha20-Poly1305 under a random data key; wraps by passphrase (Argon2id), recovery key and Windows user account each open the same key; atomic writes with one previous generation; owner-only file.
@@ -58,12 +58,13 @@ secretant run API_TOKEN -- my-program   # the value is in the program's environm
 - The installer step library (`secretant::installer`, `secrets_step`, `place_step`): pre-1.0, **may change in 0.2**.
 - Cloudflare Worker delivery (feature `cloudflare`): **tested against a fake of Cloudflare's documented API only; it has not been run against the live service yet.**
 
-## What 0.1.0 does not do
+## What it does not do
 
 - **Cloudflare delivery is not proven against the live service.** It is tested against a fake of Cloudflare's documented API only (feature `cloudflare`, off by default). Treat it as unverified until a release says it was run live.
 - **No audit.** SecretAnt keeps no record of who read a secret; the delivery ledger records what was placed where, not who asked.
 - **OS-bound wraps are Windows only.** The Windows user-account wrap (DPAPI) is in; macOS and Linux OS wraps come later. Passphrase and recovery-key wraps work everywhere.
 - **No defence against the same user.** Another program running as you can do what SecretAnt's own read API does (see the limit at the top).
+- **The hidden-prompt entry (no echo) is not tested through a real terminal on Windows or WSL.** CI has no terminal; the `--passphrase-stdin` and `--passphrase-env` paths are tested and were run by hand on Windows and WSL, the no-echo prompt was not.
 - **Not here yet:** a web interface and remote vaults.
 - **The installer modules may change in 0.2** (`installer`, `secrets_step`, `place_step`).
 
