@@ -129,7 +129,7 @@ The `secretant` program (`src/main.rs`): `init` (optional recovery key shown onc
 
 ## [0.0.3]
 
-- `Store` trait and `FileStore` (ROADMAP row 1, second slice): one JSON file; random data key, XChaCha20-Poly1305; the key wrapped by an Argon2id passphrase wrap (wrap list ready for more); put/get/get_version/list/describe with versions and non-secret metadata; atomic write keeping one previous generation (`.prev`); errors carry a class and no text. Canary tests (the leak mutation is caught), every flipped ciphertext byte fails, hostile KDF costs refused. Not published.
+- `Store` trait and `FileStore` (ROADMAP row 1, second slice): one JSON file; XChaCha20-Poly1305 encryption under a random data key, which is wrapped by an Argon2id passphrase wrap (wrap list ready for more); put/get/get_version/list/describe with versions and non-secret metadata; atomic write keeping one previous generation (`.prev`); errors carry a class and no text. Canary tests (the leak mutation is caught), every flipped ciphertext byte fails, hostile KDF costs refused. Not published.
 
 ## [0.0.2]
 

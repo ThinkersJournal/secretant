@@ -5,6 +5,12 @@
 
 [architecture]
 style = "layered"
+# Inputs this repository has none of (coderipper docs/rules/arc.md, "Saying none"); each was read from the code, not assumed:
+#  api_budget: no budget has ever been set for any component; the public surface grew on purpose (see the ARC-009 allow below).
+#  owns_data: the only stored data is the one store file, owned by `foundation` (src/store.rs); there is no table, collection, topic or .sql file.
+#  pure: no component is tagged pure; `foundation` and `services` name std::fs, std::env, std::process or std::thread APIs (grep of src/ at this commit: store, read, maintain, deliver, installer).
+# volatile and composition are declared below, not listed here.
+none = ["api_budget", "owns_data", "pure"]
 
 # The value type and the store (the sealed file, its wraps and its key handling). Depend on nothing of ours; change least.
 [[architecture.component]]
@@ -70,3 +76,13 @@ check = "MOD-008"
 file = "src/store.rs"
 symbol = "is_private"
 reason = "the facade over the platform module `os`, whose two cfg'd bodies (Unix mode bits, Windows ACL) are chosen at compile time; callers in deliver and maintain name the facade so they carry no cfg. Owner: secretant lane."
+
+# What is volatile: the HTTP client and the Cloudflare adapter. The stable components (`foundation`, `services`) name neither (grep of src/ at this commit:
+# `minreq` and `crate::cloudflare` appear only in src/cloudflare.rs, src/lib.rs, src/main.rs and src/place_step.rs).
+[architecture.volatile]
+names = ["minreq"]
+namespaces = ["crate::cloudflare"]
+
+# Where wiring happens: the command line builds the store, the readers and the delivery objects from its arguments.
+[architecture.composition]
+roots = ["src/main.rs"]
