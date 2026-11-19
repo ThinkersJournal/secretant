@@ -1,20 +1,19 @@
 # SecretAnt lane HANDOFF
 
-Rewritten 2026-11-16T18:30Z by the lane. Current state only; history is in git.
+Rewritten 2026-11-19 by the lane. Current state only; history is in git.
 
 ## State
-- Repo ThinkersJournal/secretant. `origin/main` 4af2e71 = 0.1.3 (rows 1-8 merged; #36 ROADMAP status plus truncated-bundle test merged 2026-11-16). crates.io has 0.0.2 (placeholder, 2026-11-10) and 0.0.0; nothing newer published or tagged. PM publishes and tags; the lane never does.
-- Main CI: all required jobs green; `portfolio` red only on SEC-002 (false positive at CHANGELOG.md:5, advisory, not required; do not reword).
-- Sent [READY] publish-0.1.0 readiness to the PM 2026-11-16. Open question for the PM: README says "this is 0.1.0" but Cargo.toml is 0.1.3; the PM allocates the version to publish.
-- PM owns before publish: live Cloudflare run (board 448, waits on CireSnave), SEC-002 ruling, patent-database search or CireSnave decision, no-echo passphrase check (the lane ran the stdin/env round trip on Windows and WSL: pass), consumer verification (ConfigurAnt adapter, WebHostAnt C7b with a temporary `[patch]`), publish, tag `v0.1.x`.
-- Known unverified claims: "wiped on drop" has no test (relies on redactant/zeroize); algorithm names proved by code reading only; the Unix owner-only test was not run by the lane.
-- webhostant C7b needs: `SecretValue` unchanged, `SecretReader::{open(ReadConfig),get,list}`; consumers need a wildcard arm on the `#[non_exhaustive]` enums.
-- Stale worktrees (clean before removing): secretant-wt-lane (old HANDOFF), secretant-wt-docs2 (this branch), secretant-wt-row1-store, secretant-wt-docs, secretant-wt-design.
-
-WAIT: pm-publish-0.1.x | check: gh api repos/ThinkersJournal/secretant/tags --jq .[].name | wake: 2026-11-17T12:00:00Z
+- Repo ThinkersJournal/secretant. secretant 0.1.6 published. Cluster PM pm-ants; [READY] to pm-assist cc pm-ants (C:\Projects\LANE-REPORTING.md). Synapse online.
+- PR #40 (branch lane/secretant-d2, worktree secretant-wt-lane): row 10 own ConfigurAnt schema + cycle check, row 9 probe workflow `.github/workflows/os-store-probe.yml`, ROADMAP dated. Gates green locally. Not yet [READY]: the probe jobs must run first.
+- Row 11: RedactAnt already adopted; AuditAnt is a 0.0.0 placeholder, blocked on its lane.
+- Known unverified: "wiped on drop" has no test; the Unix owner-only test was not run by the lane.
+- Stale worktrees (clean before removing): secretant-wt-row1-store, secretant-wt-docs, secretant-wt-design, secretant-wt-docs2.
 
 ## Tasks held
-1. Nothing unblocked. Rows 9 (no test env), 10 (needs ConfigurAnt on crates.io), 11 (needs RedactAnt/AuditAnt) stay blocked. Do not invent work; ask the PM. If asked: re-run the fresh-eyes trial at the version to publish (`tools/fresh-eyes-trial.sh`).
+1. Read the PR #40 probe results (jobs macos-keychain, linux-secret-service). Record the outcome in ROADMAP row 9 (dated, on the PR branch; merge origin/main, never force-push). If both are green, row 9 needs no self-hosted runner: then send [READY] to pm-assist cc pm-ants. If either fails, [ASK] pm-ants with the failing job (self-hosted per CLAUDE.md 5.1g; never #[ignore]).
+2. After merge: branch delete needs the PM; remove worktree only when clean. If the probe is green, start row 9 slice 1 on a fresh branch.
+
+WAIT: PR 40 probe jobs finished | check: gh pr view 40 --json state,mergedAt | wake: 2026-11-19T20:30:00Z
 
 ## Rules that bite
-Never print a secret value in tests/logs. Crates.io deps only. Sonnet only. Never `gh auth switch`. Sign PR text `— lane: secretant`. One PR per project per day (CireSnave 2026-11-16) unless the PM orders otherwise. Write Windows files with the Write tool or a file, not a bash heredoc holding quotes; python string edits: raw strings for regexes. Run `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps` (also `--all-features`), clippy default and `--all-features`, fmt, deny and the tests before [READY]. Force-push is denied: merge `origin/main` into open PR branches. One changelog fragment per PR (PM stamps versions). Ack every synapse message; message values have no spaces. Deleting remote branches needs the PM. WSL (Ubuntu-24.04) has cargo; its git cannot read a Windows worktree, so copy the `git ls-files` list into a Linux directory to build there.
+Never print a secret value in tests/logs. Crates.io deps only. Sonnet only. Never `gh auth switch`. Sign PR text `— lane: secretant`. One PR per project per day. Write Windows files with the Write tool. Run `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps` (also `--all-features`), clippy default and `--all-features`, fmt, deny and the tests before [READY]. One changelog fragment per PR. Ack every synapse message; message values have no spaces.
