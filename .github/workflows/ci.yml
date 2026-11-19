@@ -136,4 +136,4 @@ jobs:
   portfolio:
     permissions:
       contents: read
-    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@fc344ec79fd8e65860f052bcf614ae3d9ef9ad90 # coderipper 0.47.13 (#365)
+    uses: ciresnave/coderipper/.github/workflows/portfolio.yml@f6f560d156fa1b1f833edb0828515fb73d196e0c # coderipper 0.47.13 (#363)
