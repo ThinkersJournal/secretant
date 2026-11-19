@@ -9,7 +9,7 @@ exclude = [".github/", "tools/", "changelog.d/", "HANDOFF.md", "ROADMAP.md", ".c
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ThinkersJournal/secretant"
 readme = "README.md"
-rust-version = "1.88"
+rust-version = "1.95"
 
 [package.metadata.docs.rs]
 all-features = true

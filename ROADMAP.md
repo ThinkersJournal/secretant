@@ -25,7 +25,7 @@ Smallest set that lets ConfigurAnt publish its adapter (rows 1-3) and lets the H
 |---|---|---|
 | 7 [6] | Backup, export/import bundle (dry-run first), restore test, `doctor` | 1, 2 |
 | 8 [7] | Installer step library (`probe/plan/apply/read_back`), recovery-key confirmation, Humboldt change request | 2, 7 |
-| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2; 2026-11-19: probe job `.github/workflows/os-store-probe.yml` tests whether GitHub-hosted macos-latest (temporary keychain) and ubuntu-latest (gnome-keyring under dbus-run-session) can run the wraps' tests; result recorded here once the PR's jobs have run; if either fails, `[ASK]` pm-ants for a self-hosted runner (never `#[ignore]`) |
+| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2; 2026-11-19: probe job `.github/workflows/os-store-probe.yml` tests whether GitHub-hosted macos-latest (temporary keychain) and ubuntu-latest (gnome-keyring under dbus-run-session) can run the wraps' tests; RESULT 2026-11-19 (PR 40, run 44594742660): both jobs PASSED on GitHub-hosted runners (a keychain write and read back in 3 s; a Secret Service write and read back in 16 s), so row 9 needs no self-hosted runner; the wraps' tests run on those two jobs' setup |
 | 10 [3] | SecretAnt's own ConfigurAnt schema and the cycle check | 3; 2026-11-19: ConfigurAnt 0.7.2 is on crates.io; `configurant.toml` and `tests/own_schema.rs` done (settings that exist today; the rest of DESIGN 6.1 as each is built) |
 | 11 [8] | Adopt RedactAnt and AuditAnt when published | those; 2026-11-19: RedactAnt 0.1.2 is published and already used by `SecretValue`; AuditAnt is only a 0.0.0 placeholder on crates.io, so that half is blocked on its lane |
 
