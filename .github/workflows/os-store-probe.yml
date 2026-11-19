@@ -1,0 +1,49 @@
+name: OS store probe
+
+# ROADMAP row 9 feasibility probe (2026-11-19): can GitHub-hosted runners provide a
+# real macOS Keychain and a Linux Secret Service, so the row needs no self-hosted
+# runner? Writes and reads back a throwaway item; touches no repo code. Not a
+# required check. Remove once row 9 has real tests that run the same way.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/os-store-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-keychain:
+    runs-on: macos-latest
+    steps:
+      - name: Temporary keychain write and read back
+        run: |
+          set -euo pipefail
+          kc="$RUNNER_TEMP/probe.keychain-db"
+          security create-keychain -p probe "$kc"
+          security set-keychain-settings -t 600 "$kc"
+          security unlock-keychain -p probe "$kc"
+          security add-generic-password -a probe -s secretant-probe -w "probe-value" "$kc"
+          got="$(security find-generic-password -a probe -s secretant-probe -w "$kc")"
+          test "$got" = "probe-value"
+          security delete-keychain "$kc"
+          echo "keychain round trip ok"
+
+  linux-secret-service:
+    runs-on: ubuntu-latest
+    steps:
+      - name: gnome-keyring under dbus-run-session
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gnome-keyring libsecret-tools dbus-x11
+          cat > "$RUNNER_TEMP/probe.sh" <<'EOS'
+          set -euo pipefail
+          eval "$(printf 'probe\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          printf 'probe-value' | secret-tool store --label=probe app secretant-probe
+          got="$(secret-tool lookup app secretant-probe)"
+          test "$got" = "probe-value"
+          echo "secret service round trip ok"
+          EOS
+          dbus-run-session -- bash "$RUNNER_TEMP/probe.sh"

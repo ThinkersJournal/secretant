@@ -19,15 +19,15 @@ Smallest set that lets ConfigurAnt publish its adapter (rows 1-3) and lets the H
 | 5 [4] | Delivery plan/apply/verify for file (owner-only perms) and environment, drift report that never shows values; records what was placed where | pushed file permissions checked; drift detected after a hand edit; failed target stays stale, never half-rotated | ConfigurAnt `env`/`file:` sources work with no new code | Humboldt Docker target |
 | 6 [5] | Cloudflare Worker secret delivery (first check the API; Worker secrets are write-only so `verify` says set/unset) | fake-API test: token scope and failure handling; canary absent from requests logged | the Humboldt Worker's secrets (`TOTP_ENCRYPTION_KEY`, database URL) placed from the school's store | Humboldt installer |
 
-## After v1, in order (rows 7 and 8 merged; 9 to 11 blocked)
+## After v1, in order (rows 7, 8 and 10 done; 9 and 11 partly blocked)
 
 | Row | Deliverable | Needs |
 |---|---|---|
 | 7 [6] | Backup, export/import bundle (dry-run first), restore test, `doctor` | 1, 2 |
 | 8 [7] | Installer step library (`probe/plan/apply/read_back`), recovery-key confirmation, Humboldt change request | 2, 7 |
-| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2; blocked: no test environment |
-| 10 [3] | SecretAnt's own ConfigurAnt schema and the cycle check | 3; blocked: needs ConfigurAnt on crates.io |
-| 11 [8] | Adopt RedactAnt and AuditAnt when published | those; blocked: not published |
+| 9 [2] | macOS Keychain and Linux Secret Service / `systemd-creds` wraps | 2; 2026-11-19: probe job `.github/workflows/os-store-probe.yml` tests whether GitHub-hosted macos-latest (temporary keychain) and ubuntu-latest (gnome-keyring under dbus-run-session) can run the wraps' tests; result recorded here once the PR's jobs have run; if either fails, `[ASK]` pm-ants for a self-hosted runner (never `#[ignore]`) |
+| 10 [3] | SecretAnt's own ConfigurAnt schema and the cycle check | 3; 2026-11-19: ConfigurAnt 0.7.2 is on crates.io; `configurant.toml` and `tests/own_schema.rs` done (settings that exist today; the rest of DESIGN 6.1 as each is built) |
+| 11 [8] | Adopt RedactAnt and AuditAnt when published | those; 2026-11-19: RedactAnt 0.1.2 is published and already used by `SecretValue`; AuditAnt is only a 0.0.0 placeholder on crates.io, so that half is blocked on its lane |
 
 ## NOT in v1
 

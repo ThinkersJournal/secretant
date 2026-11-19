@@ -1,0 +1,26 @@
+[project]
+name = "secretant"
+version = "0.1.6"
+summary = "SecretAnt's own settings: the store file and the unlock secret"
+schema_version = 1
+env_prefix = "SECRETANT_"
+
+# SecretAnt's own schema (ROADMAP row 10, DESIGN section 6.1). Only settings that
+# exist today are listed; the rest of section 6.1 is added as each is built.
+#
+# No value here may carry `source = "secretant:..."`: SecretAnt would ask itself
+# for the key it needs to start (DESIGN section 6.3). tests/own_schema.rs enforces it.
+
+[[value]]
+key = "store.path"
+type = "string"
+description = "the store file; the per-user default when unset"
+env = "SECRETANT_STORE"
+flag = "--store"
+
+[[value]]
+key = "unlock.passphrase"
+type = "string"
+secret = true
+description = "the passphrase that unlocks the store (environment only, read when asked for by name)"
+env = "SECRETANT_PASSPHRASE"

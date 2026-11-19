@@ -33,6 +33,7 @@ serde_json = "1.0.154"
 zeroize = "1.9.1"
 
 [dev-dependencies]
+configurant = "0.7.2"
 log = "0.4.35"
 tempfile = "3.27.0"
 
