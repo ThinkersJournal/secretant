@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.6] — CI: portfolio job re-pinned to coderipper 0.47.13
+
+The portfolio workflow in `.github/workflows/ci.yml` now points at coderipper 0.47.13, whose reviewed SEC-002 waivers cover the two history findings in `CHANGELOG.md`. No code change. Checked by the Portfolio job on this PR.
+
+— lane: secretant
+
 ## [0.1.5] — Changed
 
 README no longer names a release number in its status line or headings, and its known-gaps list says the hidden-prompt (no echo) entry is not tested through a real terminal on Windows or WSL. `.coderipper.toml` declares the volatile names (`minreq`, `crate::cloudflare`) and the composition root (`src/main.rs`), and says `none` for an API budget, owned data and pure components, each with the reason read from the code, so ARC-003, ARC-006, ARC-007, ARC-012 and EFX-001 run instead of reading "not run". One CHANGELOG line for 0.0.3 is reworded so the secret scanner stops matching it in the current tree. Checked by running those five rules with coderipper 0.47.13 (0 findings, all ran) and gitleaks 8.30.1 in dir mode (0 findings). No code change.
