@@ -83,3 +83,19 @@ jobs:
           cargo test --locked --features os-keystore --test installer the_os_bound
           EOS
           dbus-run-session -- bash "$RUNNER_TEMP/probe.sh"
+
+  # ROADMAP row 9, systemd-creds half: can an unprivileged user encrypt and decrypt a
+  # credential on a GitHub-hosted runner? Informational probe; its output decides whether
+  # the wrap is built (`--user` needs systemd 256 or newer).
+  systemd-creds-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: systemd version and an unprivileged round trip
+        continue-on-error: true
+        run: |
+          systemd-creds --version | head -2
+          id -un
+          printf 'probe-value' | systemd-creds --user encrypt --name=secretant-probe - "$RUNNER_TEMP/cred"
+          systemd-creds --user decrypt --name=secretant-probe "$RUNNER_TEMP/cred" -
+          echo
+          echo "user-scope systemd-creds round trip ok"
