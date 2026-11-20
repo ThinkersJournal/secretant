@@ -1,6 +1,6 @@
 [project]
 name = "secretant"
-version = "0.2.0"
+version = "0.2.1"
 summary = "SecretAnt's own settings: the store file and the unlock secret"
 schema_version = 1
 env_prefix = "SECRETANT_"
