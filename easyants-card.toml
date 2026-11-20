@@ -1,0 +1,8 @@
+name = "SecretAnt"
+sentence = "Your own encrypted secret store: programs read a secret by name, with no value in logs, arguments or the repository."
+status = "ready"
+install_url = "https://crates.io/crates/secretant"
+install_snippet = "cargo add secretant"
+docs = "https://github.com/ThinkersJournal/secretant"
+example_path = "examples/quickstart.rs"
+example_lines = [7, 13]
