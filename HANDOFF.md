@@ -10,7 +10,7 @@ Rewritten 2026-11-20 by the lane. Current state only; history is in git.
 
 ## Tasks held
 1. Branch lane/secretant-d4 (pushed, 2 commits ahead of main, fragment changelog.d/os-wrap-installer.md): README states 0.2.1 Breaking vs 0.1.5, card snippet `cargo add secretant@0.2.1`, OS wrap in installer and CLI (OS_WRAP_SUPPORTED). Local gates green. Open the PR on 2026-11-21 UTC or later (one per day: #41 opened 11-20), then [READY] to pm-assist cc pm-ants; the macos-keychain and linux-secret-service jobs must run the installer test.
-2. Then: systemd-creds wrap (not started). If main moved, merge origin/main into d4 first.
+2. d4 also has: README claim-to-command audit (done, fragment updated) and a `systemd-creds-probe` job in os-store-probe.yml (informational, continue-on-error). When the PR runs, read its log: if an unprivileged `systemd-creds --user encrypt/decrypt` works, build the wrap (kind os-systemd-creds, blob = the credential text; tests on ubuntu-latest); if not (needs systemd 256+), record that in ROADMAP row 9 and drop the wrap. Remote lane/secretant (old branch, fcbd0a5) is audited safe-to-delete but the delete was denied by the permission classifier: needs the user; do not delete it yourself. If main moved, merge origin/main into d4 first.
 
 WAIT: day rule: open the d4 PR | check: git ls-remote --heads origin lane/secretant-d4 | wake: 2026-11-21T00:05:00Z
 
