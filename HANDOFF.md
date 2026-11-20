@@ -12,5 +12,7 @@ Rewritten 2026-11-20 by the lane. Current state only; history is in git.
 1. Branch lane/secretant-d4 (pushed, 2 commits ahead of main, fragment changelog.d/os-wrap-installer.md): README states 0.2.1 Breaking vs 0.1.5, card snippet `cargo add secretant@0.2.1`, OS wrap in installer and CLI (OS_WRAP_SUPPORTED). Local gates green. Open the PR on 2026-11-21 UTC or later (one per day: #41 opened 11-20), then [READY] to pm-assist cc pm-ants; the macos-keychain and linux-secret-service jobs must run the installer test.
 2. Then: systemd-creds wrap (not started). If main moved, merge origin/main into d4 first.
 
+WAIT: day rule: open the d4 PR | check: git ls-remote --heads origin lane/secretant-d4 | wake: 2026-11-21T00:05:00Z
+
 ## Rules that bite
 Never print a secret value in tests/logs. Crates.io deps only. Sonnet only. Never `gh auth switch`. Sign PR text `— lane: secretant`. One PR per project per day. Write Windows files with the Write tool. Run `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps` (also `--all-features`), clippy default and `--all-features`, fmt, deny and the tests before [READY]. One changelog fragment per PR. Do not push HANDOFF-only commits to an open PR (reruns CI). Ack every synapse message; message values have no spaces.
