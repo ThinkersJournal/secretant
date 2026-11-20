@@ -404,7 +404,7 @@ fn try_wrap(w: &Wrap, unlock: &Unlock<'_>) -> Result<Option<Zeroizing<[u8; KEY_L
             };
             Ok(unseal(key.as_ref(), &nonce, AAD_WRAP, &wrapped).and_then(|k| data_key_from(&k)))
         }
-        ("os-dpapi", Unlock::Os) => {
+        ("os-dpapi" | "os-keystore", Unlock::Os) => {
             let Some(blob) = from_hex(&w.wrapped) else {
                 return Err(StoreError::Corrupt);
             };
@@ -583,13 +583,14 @@ impl FileStore {
     }
 
     /// Add an OS-bound wrap so this user, on this machine, opens the store with
-    /// no password (an unattended program). Windows only for now; other systems
-    /// get `OsWrapFailed`. Any process running as the same user can ask: that is
+    /// no password (an unattended program). Windows (DPAPI) always; macOS (Keychain)
+    /// and Linux (Secret Service) with the `os-keystore` feature; otherwise
+    /// `OsWrapFailed`. Any process running as the same user can ask: that is
     /// the stated limit of this wrap.
     pub fn add_os_wrap(&mut self) -> Result<(), StoreError> {
         let blob = os::protect(self.data_key.as_ref()).ok_or(StoreError::OsWrapFailed)?;
         self.push_wrap(Wrap {
-            kind: "os-dpapi".into(),
+            kind: os::KIND.into(),
             salt: String::new(),
             kdf: None,
             nonce: String::new(),
@@ -1017,15 +1018,82 @@ mod os {
         }
     }
 
+    /// The wrap kind written to the store file.
+    #[cfg(windows)]
+    pub const KIND: &str = "os-dpapi";
     #[cfg(not(windows))]
+    pub const KIND: &str = "os-keystore";
+
+    #[cfg(not(any(
+        windows,
+        all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+    )))]
     pub fn protect(_data: &[u8]) -> Option<Vec<u8>> {
         None
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(
+        windows,
+        all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+    )))]
     pub fn unprotect(_blob: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
         None
     }
+
+    /// macOS Keychain and Linux Secret Service. Unlike DPAPI these hold the data
+    /// key themselves, so the blob in the store file is only a random item name;
+    /// deleting the OS item (or moving the file to another user or machine) makes
+    /// this wrap fail, and the passphrase or recovery wrap still opens the store.
+    #[cfg(all(feature = "os-keystore", any(target_os = "macos", target_os = "linux")))]
+    mod keystore {
+        use keyring_core::Entry;
+        use std::sync::OnceLock;
+
+        const SERVICE: &str = "secretant-os-wrap";
+
+        fn ready() -> bool {
+            static READY: OnceLock<bool> = OnceLock::new();
+            *READY.get_or_init(|| {
+                if keyring_core::get_default_store().is_some() {
+                    return true;
+                }
+                #[cfg(target_os = "macos")]
+                let store = apple_native_keyring_store::keychain::Store::new();
+                #[cfg(target_os = "linux")]
+                let store = dbus_secret_service_keyring_store::Store::new();
+                match store {
+                    Ok(st) => {
+                        keyring_core::set_default_store(st);
+                        true
+                    }
+                    Err(_) => false,
+                }
+            })
+        }
+
+        pub fn protect(data: &[u8]) -> Option<Vec<u8>> {
+            if !ready() {
+                return None;
+            }
+            let mut raw = [0u8; 16];
+            getrandom::fill(&mut raw).ok()?;
+            let id: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+            Entry::new(SERVICE, &id).ok()?.set_secret(data).ok()?;
+            Some(id.into_bytes())
+        }
+
+        pub fn unprotect(blob: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+            if !ready() {
+                return None;
+            }
+            let id = std::str::from_utf8(blob).ok()?;
+            let secret = Entry::new(SERVICE, id).ok()?.get_secret().ok()?;
+            Some(zeroize::Zeroizing::new(secret))
+        }
+    }
+
+    #[cfg(all(feature = "os-keystore", any(target_os = "macos", target_os = "linux")))]
+    pub use keystore::{protect, unprotect};
 
     /// Windows: true when the ACL lists no principal but the current user.
     #[cfg(windows)]
@@ -1797,13 +1865,65 @@ mod tests {
         );
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(
+        windows,
+        all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+    )))]
     #[test]
     fn os_wrap_is_a_named_error_where_unsupported() {
         let dir = tempfile::tempdir().unwrap();
         let mut s = new_store(&dir);
         assert_eq!(s.add_os_wrap().err(), Some(StoreError::OsWrapFailed));
         assert_eq!(s.wrap_kinds(), vec!["passphrase".to_string()]);
+    }
+
+    /// Where an OS wrap works: Windows always, macOS and Linux with `os-keystore`.
+    /// CI runs these on a real Keychain (macos-latest) and a gnome-keyring Secret
+    /// Service (ubuntu-latest, `.github/workflows/os-store-probe.yml`).
+    #[cfg(any(
+        windows,
+        all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+    ))]
+    #[test]
+    fn os_wrap_round_trips_and_a_wrong_item_does_not_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put(
+            "A",
+            SecretValue::from_string("CANARY-os-wrap-5b1e".into()),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        // No OS key store on this machine (a plain `--all-features` run): skip, loudly.
+        // The dedicated CI jobs set SECRETANT_OS_WRAP_REQUIRED=1, so there it must work.
+        if let Err(e) = s.add_os_wrap() {
+            assert!(
+                !cfg!(windows) && std::env::var_os("SECRETANT_OS_WRAP_REQUIRED").is_none(),
+                "the OS key store is required here but failed: {e}"
+            );
+            eprintln!("skipped: no OS key store (set SECRETANT_OS_WRAP_REQUIRED=1 to require it)");
+            return;
+        }
+        assert!(s.wrap_kinds().contains(&os::KIND.to_string()));
+        let reopened = FileStore::open_with(&path, Unlock::Os).unwrap();
+        assert_eq!(reopened.get("A").unwrap().expose(), b"CANARY-os-wrap-5b1e");
+        // The file holds no copy of the value or of the data key in the clear.
+        assert!(
+            !String::from_utf8_lossy(&fs::read(&path).unwrap()).contains("CANARY-os-wrap-5b1e")
+        );
+        // Negative control: the same file with the wrap pointing at another item must fail.
+        let mut image: FileImage = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        for w in image.wraps.iter_mut().filter(|w| w.kind == os::KIND) {
+            let mut blob = from_hex(&w.wrapped).unwrap();
+            blob[0] ^= 0x01;
+            w.wrapped = to_hex(&blob);
+        }
+        fs::write(&path, serde_json::to_vec(&image).unwrap()).unwrap();
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Os).err(),
+            Some(StoreError::OsWrapFailed)
+        );
     }
 
     #[cfg(unix)]

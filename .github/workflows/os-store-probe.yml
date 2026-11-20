@@ -1,0 +1,80 @@
+name: OS key wraps
+
+# ROADMAP row 9: the macOS Keychain and Linux Secret Service key wraps (`os-keystore`
+# feature) are tested on a real Keychain and a real Secret Service on GitHub-hosted
+# runners (probe result 2026-11-19: both work, so no self-hosted runner). Each job
+# first round-trips a throwaway item with the OS tool, then runs the wrap tests.
+# Not a required check yet.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/os-store-probe.yml"
+      - "src/store.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  SECRETANT_OS_WRAP_REQUIRED: "1"
+
+jobs:
+  macos-keychain:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+
+      - name: Temporary default keychain, round trip with the OS tool
+        run: |
+          set -euo pipefail
+          kc="$RUNNER_TEMP/probe.keychain-db"
+          security create-keychain -p probe "$kc"
+          security set-keychain-settings -t 3600 "$kc"
+          security unlock-keychain -p probe "$kc"
+          security default-keychain -s "$kc"
+          security add-generic-password -a probe -s secretant-probe -w "probe-value" "$kc"
+          got="$(security find-generic-password -a probe -s secretant-probe -w "$kc")"
+          test "$got" = "probe-value"
+          echo "keychain round trip ok"
+
+      - name: OS wrap tests on the Keychain
+        run: cargo test --locked --features os-keystore --lib os_wrap
+
+  linux-secret-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+
+      - name: Install gnome-keyring
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gnome-keyring libsecret-tools dbus-x11 libdbus-1-dev pkg-config
+
+      - name: Build the tests (outside the session)
+        run: cargo test --locked --features os-keystore --lib --no-run
+
+      - name: Round trip with secret-tool, then the OS wrap tests, under dbus-run-session
+        run: |
+          cat > "$RUNNER_TEMP/probe.sh" <<'EOS'
+          set -euo pipefail
+          eval "$(printf 'probe\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          printf 'probe-value' | secret-tool store --label=probe app secretant-probe
+          got="$(secret-tool lookup app secretant-probe)"
+          test "$got" = "probe-value"
+          echo "secret service round trip ok"
+          cargo test --locked --features os-keystore --lib os_wrap
+          EOS
+          dbus-run-session -- bash "$RUNNER_TEMP/probe.sh"
