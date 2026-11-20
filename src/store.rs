@@ -330,6 +330,16 @@ fn unseal(key: &[u8], nonce: &[u8], aad: &[u8], sealed: &[u8]) -> Option<Zeroizi
         .map(Zeroizing::new)
 }
 
+/// Whether this build can make and open an OS-bound wrap: Windows always; macOS
+/// and Linux when the `os-keystore` feature is on.
+pub const OS_WRAP_SUPPORTED: bool = cfg!(any(
+    windows,
+    all(
+        feature = "os-keystore",
+        any(target_os = "macos", target_os = "linux")
+    )
+));
+
 /// What opens a store.
 pub enum Unlock<'a> {
     /// The person's passphrase.

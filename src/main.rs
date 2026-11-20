@@ -23,7 +23,7 @@
 //! (`put` and `rotate` also ask the value that way when standard input is a
 //! terminal). With no terminal there is no silent fallback: choose
 //! `--passphrase-stdin` (first line of standard input), `--recovery-stdin`
-//! (first line), `--os` (Windows user account) or `--passphrase-env` (the
+//! (first line), `--os` (the operating system: Windows account, or the macOS Keychain / Linux Secret Service in a build with the `os-keystore` feature) or `--passphrase-env` (the
 //! variable `SECRETANT_PASSPHRASE`, only when asked for by name).
 //! Store file: `--store PATH`, else `SECRETANT_STORE`, else the per-user default.
 
@@ -95,7 +95,7 @@ enum Cmd {
         /// Also add a recovery key, shown once
         #[arg(long)]
         recovery: bool,
-        /// Also add the Windows user-account wrap
+        /// Also add the operating-system wrap (Windows; macOS and Linux with the `os-keystore` feature)
         #[arg(long)]
         add_os: bool,
     },

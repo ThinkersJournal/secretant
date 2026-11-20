@@ -241,25 +241,45 @@ fn discarding_never_touches_a_real_store() {
     assert_eq!(before, std::fs::read(&path).unwrap());
 }
 
-#[cfg(windows)]
+#[cfg(any(
+    windows,
+    all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+))]
 #[test]
-fn the_os_bound_wrap_is_added_when_asked_on_windows() {
+fn the_os_bound_wrap_is_added_when_asked() {
     let (_d, path) = dir_and_path();
     let plan = plan_store(&path, probe_store(&path), true);
     assert_eq!(plan.action, StoreAction::Create { os_wrap: true });
     let StoreApplied::Pending {
         store,
         recovery_key,
-    } = apply_store(&plan, &pass(PASS)).unwrap()
+    } = (match apply_store(&plan, &pass(PASS)) {
+        Ok(applied) => applied,
+        // No OS key store here (a plain `--all-features` run): skip, loudly. The CI
+        // jobs in os-store-probe.yml set SECRETANT_OS_WRAP_REQUIRED=1.
+        Err(e) if !cfg!(windows) && std::env::var_os("SECRETANT_OS_WRAP_REQUIRED").is_none() => {
+            eprintln!("skipped: no OS key store ({e:?})");
+            return;
+        }
+        Err(e) => panic!("the OS key store is required here: {e:?}"),
+    })
     else {
         panic!("expected a pending store");
     };
     confirm_recovery(&store, &recovery_key).unwrap();
     let r = read_back_store(&path, Unlock::Os).unwrap();
-    assert_eq!(r.wraps, ["passphrase", "os-dpapi", "recovery"]);
+    let kind = if cfg!(windows) {
+        "os-dpapi"
+    } else {
+        "os-keystore"
+    };
+    assert_eq!(r.wraps, ["passphrase", kind, "recovery"]);
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(
+    windows,
+    all(feature = "os-keystore", any(target_os = "macos", target_os = "linux"))
+)))]
 #[test]
 fn the_os_bound_wrap_is_refused_not_silently_dropped_elsewhere() {
     let (_d, path) = dir_and_path();

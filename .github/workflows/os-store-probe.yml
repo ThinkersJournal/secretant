@@ -11,6 +11,8 @@ on:
     paths:
       - ".github/workflows/os-store-probe.yml"
       - "src/store.rs"
+      - "src/installer.rs"
+      - "tests/installer.rs"
       - "Cargo.toml"
       - "Cargo.lock"
 
@@ -46,7 +48,9 @@ jobs:
           echo "keychain round trip ok"
 
       - name: OS wrap tests on the Keychain
-        run: cargo test --locked --features os-keystore --lib os_wrap
+        run: |
+          cargo test --locked --features os-keystore --lib os_wrap
+          cargo test --locked --features os-keystore --test installer the_os_bound
 
   linux-secret-service:
     runs-on: ubuntu-latest
@@ -64,7 +68,7 @@ jobs:
           sudo apt-get install -y -qq gnome-keyring libsecret-tools dbus-x11 libdbus-1-dev pkg-config
 
       - name: Build the tests (outside the session)
-        run: cargo test --locked --features os-keystore --lib --no-run
+        run: cargo test --locked --features os-keystore --lib --test installer --no-run
 
       - name: Round trip with secret-tool, then the OS wrap tests, under dbus-run-session
         run: |
@@ -76,5 +80,6 @@ jobs:
           test "$got" = "probe-value"
           echo "secret service round trip ok"
           cargo test --locked --features os-keystore --lib os_wrap
+          cargo test --locked --features os-keystore --test installer the_os_bound
           EOS
           dbus-run-session -- bash "$RUNNER_TEMP/probe.sh"

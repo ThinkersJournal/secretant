@@ -28,7 +28,7 @@ pub use deliver::{
 pub use maintain::{BackupSummary, Check, Finding, Level, backup, check_backup, doctor, restore};
 pub use read::{ReadConfig, ReadError, ReadUnlock, SecretReader};
 pub use store::{
-    EntryInfo, FileStore, ImportConflict, ImportItem, ImportReport, Inspection, KdfParams, Store,
-    StoreError, Unlock,
+    EntryInfo, FileStore, ImportConflict, ImportItem, ImportReport, Inspection, KdfParams,
+    OS_WRAP_SUPPORTED, Store, StoreError, Unlock,
 };
 pub use value::SecretValue;
