@@ -157,7 +157,7 @@ impl StorePlan {
 /// OS-bound wrap; where the platform has none the plan refuses (nothing
 /// falls back silently).
 pub fn plan_store(path: &Path, probe: StoreProbe, os_wrap: bool) -> StorePlan {
-    let action = if os_wrap && !cfg!(windows) {
+    let action = if os_wrap && !crate::OS_WRAP_SUPPORTED {
         StoreAction::Refuse(InstallError::OsWrapUnavailable)
     } else {
         match &probe {

@@ -6,6 +6,8 @@ One place, controlled by its owner, where a person or school keeps their secrets
 program running as the same user: such a program can do what SecretAnt's own read API does. It also has no recovery path of ours: lose every way
 of opening the store and the secrets are gone.
 
+**0.2.1 is breaking relative to 0.1.5** (pre-1.0, so the second number; 0.2.0 was never published): the minimum Rust version rises from 1.88 to 1.95. New since 0.1.5: SecretAnt's own ConfigurAnt schema (`configurant.toml`), and the off-by-default feature `os-keystore`, which lets `Unlock::Os` and `FileStore::add_os_wrap` use the macOS Keychain and the Linux Secret Service as well as Windows DPAPI (`cargo add secretant --features os-keystore`).
+
 ## Ten lines
 
 Add the crate, and `tempfile` too: the example keeps its store in a throwaway directory (a real program would not need `tempfile`).
@@ -43,8 +45,9 @@ The same from the command line (the value is read from standard input or the ter
 
 ```sh
 secretant init                       # asks for a new passphrase, twice, no echo
+export SECRETANT_PASSPHRASE='the passphrase you chose'   # read only because --passphrase-env asks for it by name
 echo -n 's3cret' | secretant --passphrase-env put API_TOKEN
-secretant run API_TOKEN -- my-program   # the value is in the program's environment only
+secretant --passphrase-env run API_TOKEN -- my-program   # the value is in the program's environment only
 ```
 
 `secretant --help` lists every command: `init put rotate get list run backup restore-test restore doctor export import deliver cloudflare`.
@@ -52,21 +55,21 @@ secretant run API_TOKEN -- my-program   # the value is in the program's environm
 ## What is in it
 
 - `SecretValue`: no `Display`, `Clone` or `Serialize`, `Debug` shows nothing, wiped on drop.
-- `FileStore`: XChaCha20-Poly1305 under a random data key; wraps by passphrase (Argon2id), recovery key and Windows user account each open the same key; atomic writes with one previous generation; owner-only file.
+- `FileStore`: XChaCha20-Poly1305 under a random data key; wraps by passphrase (Argon2id), recovery key and the operating system (Windows DPAPI; macOS Keychain and Linux Secret Service with feature `os-keystore`) each open the same key; atomic writes with one previous generation; owner-only file.
 - `SecretReader` (open, get, list names): four error classes (`NotFound`, `Denied`, `Unreachable`, `TimedOut`) and a timeout on every call, for adapters.
 - Backup, restore, `doctor`, export and import bundles; delivery plan, apply and verify to files and environment files with a ledger of what was placed where.
-- The installer step library (`secretant::installer`, `secrets_step`, `place_step`): pre-1.0, **may change in 0.2**.
+- The installer step library (`secretant::installer`, `secrets_step`, `place_step`): pre-1.0, **may change in any 0.x release**.
 - Cloudflare Worker delivery (feature `cloudflare`): **tested against a fake of Cloudflare's documented API only; it has not been run against the live service yet.**
 
 ## What it does not do
 
 - **Cloudflare delivery is not proven against the live service.** It is tested against a fake of Cloudflare's documented API only (feature `cloudflare`, off by default). Treat it as unverified until a release says it was run live.
 - **No audit.** SecretAnt keeps no record of who read a secret; the delivery ledger records what was placed where, not who asked.
-- **OS-bound wraps are Windows only.** The Windows user-account wrap (DPAPI) is in; macOS and Linux OS wraps come later. Passphrase and recovery-key wraps work everywhere.
+- **OS-bound wraps need Windows, or the `os-keystore` feature.** The Windows wrap (DPAPI) is always in. On macOS (Keychain) and Linux (Secret Service, needs a running session bus and an unlocked keyring) it is behind the off-by-default feature `os-keystore`, tested on real stores in CI; the `systemd-creds` wrap is not built. Passphrase and recovery-key wraps work everywhere.
 - **No defence against the same user.** Another program running as you can do what SecretAnt's own read API does (see the limit at the top).
 - **The hidden-prompt entry (no echo) is not tested through a real terminal on Windows or WSL.** CI has no terminal; the `--passphrase-stdin` and `--passphrase-env` paths are tested and were run by hand on Windows and WSL, the no-echo prompt was not.
 - **Not here yet:** a web interface and remote vaults.
-- **The installer modules may change in 0.2** (`installer`, `secrets_step`, `place_step`).
+- **The installer modules may change in any 0.x release** (`installer`, `secrets_step`, `place_step`).
 
 **Dependencies.** The default build has **50 packages** in its normal dependency tree (`cargo tree -e normal --prefix none | sed 's/ .*//' | sort -u | wc -l`)
 and no HTTP or TLS crate. Cloudflare Worker delivery is the cargo feature `cloudflare` (off by default; it adds an HTTP client and the TLS stack under it).
