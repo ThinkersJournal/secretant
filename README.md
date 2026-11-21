@@ -65,7 +65,7 @@ secretant --passphrase-env run API_TOKEN -- my-program   # the value is in the p
 
 - **Cloudflare delivery is not proven against the live service.** It is tested against a fake of Cloudflare's documented API only (feature `cloudflare`, off by default). Treat it as unverified until a release says it was run live.
 - **No audit.** SecretAnt keeps no record of who read a secret; the delivery ledger records what was placed where, not who asked.
-- **OS-bound wraps need Windows, or the `os-keystore` feature.** The Windows wrap (DPAPI) is always in. On macOS (Keychain) and Linux (Secret Service, needs a running session bus and an unlocked keyring) it is behind the off-by-default feature `os-keystore`, tested on real stores in CI; the `systemd-creds` wrap is not built. Passphrase and recovery-key wraps work everywhere.
+- **OS-bound wraps need Windows, or the `os-keystore` feature.** The Windows wrap (DPAPI) is always in. On macOS (Keychain) and Linux (Secret Service, needs a running session bus and an unlocked keyring) it is behind the off-by-default feature `os-keystore`, tested on real stores in CI; where there is no Secret Service, Linux falls back to a per-user `systemd-creds` credential (needs systemd 256 or newer; `--user`), tested in CI. Passphrase and recovery-key wraps work everywhere.
 - **No defence against the same user.** Another program running as you can do what SecretAnt's own read API does (see the limit at the top).
 - **The hidden-prompt entry (no echo) is not tested through a real terminal on Windows or WSL.** CI has no terminal; the `--passphrase-stdin` and `--passphrase-env` paths are tested and were run by hand on Windows and WSL, the no-echo prompt was not.
 - **Not here yet:** a web interface and remote vaults.

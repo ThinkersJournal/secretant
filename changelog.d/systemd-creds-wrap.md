@@ -1,0 +1,3 @@
+kind: Linux falls back to a per-user systemd-creds OS wrap (row 9 slice 3)
+---
+With the `os-keystore` feature on Linux, `FileStore::add_os_wrap` now tries the Secret Service first and, if that fails, a per-user `systemd-creds` credential (`systemd-creds --user encrypt`, needs systemd 256 or newer). The wrap kind is `os-systemd-creds`; `Unlock::Os` opens it. The data key goes to `systemd-creds` over stdin and comes back over stdout, never through argv or a file. `src/store.rs::systemd_creds_wrap_round_trips_and_a_damaged_blob_does_not_open` runs in the `systemd-creds` job of `.github/workflows/os-store-probe.yml` on ubuntu-latest with `SECRETANT_SYSTEMD_CREDS_REQUIRED=1`; elsewhere it skips loudly. `docs/FORMAT.md` lists the `os-keystore` and `os-systemd-creds` kinds.

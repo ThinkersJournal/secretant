@@ -420,6 +420,13 @@ fn try_wrap(w: &Wrap, unlock: &Unlock<'_>) -> Result<Option<Zeroizing<[u8; KEY_L
             };
             Ok(os::unprotect(&blob).and_then(|k| data_key_from(&k)))
         }
+        #[cfg(all(feature = "os-keystore", target_os = "linux"))]
+        ("os-systemd-creds", Unlock::Os) => {
+            let Some(blob) = from_hex(&w.wrapped) else {
+                return Err(StoreError::Corrupt);
+            };
+            Ok(os::systemd_creds::unprotect(&blob).and_then(|k| data_key_from(&k)))
+        }
         _ => Ok(None),
     }
 }
@@ -598,13 +605,24 @@ impl FileStore {
     /// `OsWrapFailed`. Any process running as the same user can ask: that is
     /// the stated limit of this wrap.
     pub fn add_os_wrap(&mut self) -> Result<(), StoreError> {
-        let blob = os::protect(self.data_key.as_ref()).ok_or(StoreError::OsWrapFailed)?;
+        if let Some(blob) = os::protect(self.data_key.as_ref()) {
+            return self.push_os_wrap(os::KIND, &blob);
+        }
+        // Linux with no Secret Service: the per-user systemd credential.
+        #[cfg(all(feature = "os-keystore", target_os = "linux"))]
+        if let Some(blob) = os::systemd_creds::protect(self.data_key.as_ref()) {
+            return self.push_os_wrap(os::systemd_creds::KIND, &blob);
+        }
+        Err(StoreError::OsWrapFailed)
+    }
+
+    fn push_os_wrap(&mut self, kind: &str, blob: &[u8]) -> Result<(), StoreError> {
         self.push_wrap(Wrap {
-            kind: os::KIND.into(),
+            kind: kind.into(),
             salt: String::new(),
             kdf: None,
             nonce: String::new(),
-            wrapped: to_hex(&blob),
+            wrapped: to_hex(blob),
         })
     }
 
@@ -1104,6 +1122,43 @@ mod os {
 
     #[cfg(all(feature = "os-keystore", any(target_os = "macos", target_os = "linux")))]
     pub use keystore::{protect, unprotect};
+
+    /// Linux without a Secret Service (a server, a container with systemd): the
+    /// per-user `systemd-creds` credential. The blob is the credential text that
+    /// `systemd-creds --user encrypt` prints; the key stays with the user's
+    /// systemd credential store, so another user or machine cannot open it.
+    /// The plaintext goes over stdin and stdout only, never argv or a file.
+    #[cfg(all(feature = "os-keystore", target_os = "linux"))]
+    pub mod systemd_creds {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        /// The wrap kind written to the store file.
+        pub const KIND: &str = "os-systemd-creds";
+        const NAME: &str = "--name=secretant-os-wrap";
+
+        fn run(verb: &str, input: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+            let mut child = Command::new("systemd-creds")
+                .args(["--user", verb, NAME, "-", "-"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .ok()?;
+            child.stdin.take()?.write_all(input).ok()?;
+            let out = child.wait_with_output().ok()?;
+            let text = zeroize::Zeroizing::new(out.stdout);
+            (out.status.success() && !text.is_empty()).then_some(text)
+        }
+
+        pub fn protect(data: &[u8]) -> Option<Vec<u8>> {
+            run("encrypt", data).map(|t| t.to_vec())
+        }
+
+        pub fn unprotect(blob: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+            run("decrypt", blob)
+        }
+    }
 
     /// Windows: true when the ACL lists no principal but the current user.
     #[cfg(windows)]
@@ -1928,6 +1983,55 @@ mod tests {
             let mut blob = from_hex(&w.wrapped).unwrap();
             blob[0] ^= 0x01;
             w.wrapped = to_hex(&blob);
+        }
+        fs::write(&path, serde_json::to_vec(&image).unwrap()).unwrap();
+        assert_eq!(
+            FileStore::open_with(&path, Unlock::Os).err(),
+            Some(StoreError::OsWrapFailed)
+        );
+    }
+
+    /// The `systemd-creds` wrap, forced (the Secret Service wrap would win in
+    /// `add_os_wrap` where both exist). CI sets SECRETANT_SYSTEMD_CREDS_REQUIRED=1.
+    #[cfg(all(feature = "os-keystore", target_os = "linux"))]
+    #[test]
+    fn systemd_creds_wrap_round_trips_and_a_damaged_blob_does_not_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.secretant");
+        let mut s = new_store(&dir);
+        s.put(
+            "A",
+            SecretValue::from_string("CANARY-systemd-creds-7c2d".into()),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let Some(blob) = os::systemd_creds::protect(s.data_key.as_ref()) else {
+            assert!(
+                std::env::var_os("SECRETANT_SYSTEMD_CREDS_REQUIRED").is_none(),
+                "systemd-creds is required here but failed"
+            );
+            eprintln!("skipped: no user systemd-creds (set SECRETANT_SYSTEMD_CREDS_REQUIRED=1)");
+            return;
+        };
+        s.push_os_wrap(os::systemd_creds::KIND, &blob).unwrap();
+        let reopened = FileStore::open_with(&path, Unlock::Os).unwrap();
+        assert_eq!(
+            reopened.get("A").unwrap().expose(),
+            b"CANARY-systemd-creds-7c2d"
+        );
+        let text = String::from_utf8_lossy(&fs::read(&path).unwrap()).into_owned();
+        assert!(!text.contains("CANARY-systemd-creds-7c2d"));
+        // Negative control: a damaged credential must fail with the named error.
+        let mut image: FileImage = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        for w in image
+            .wraps
+            .iter_mut()
+            .filter(|w| w.kind == os::systemd_creds::KIND)
+        {
+            let mut b = from_hex(&w.wrapped).unwrap();
+            let mid = b.len() / 2;
+            b[mid] = if b[mid] == b'A' { b'B' } else { b'A' };
+            w.wrapped = to_hex(&b);
         }
         fs::write(&path, serde_json::to_vec(&image).unwrap()).unwrap();
         assert_eq!(

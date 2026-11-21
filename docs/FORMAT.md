@@ -40,6 +40,8 @@ Each wrap independently encrypts the same data key (XChaCha20-Poly1305, associat
 | `passphrase` | Argon2id (version 0x13) over the passphrase bytes, 16-byte `salt`, cost `kdf` = `{ "m_kib", "t", "p" }`, 32-byte output | `salt`, `kdf`, `nonce`, `wrapped` |
 | `recovery` | a random 256-bit key, shown to the owner once as 64 hex digits in groups of 8 joined by `-`, never stored | `nonce`, `wrapped` |
 | `os-dpapi` | Windows DPAPI (current user) protects the data key; `wrapped` is the DPAPI blob | `wrapped` |
+| `os-keystore` | macOS Keychain or Linux Secret Service holds the data key; `wrapped` is a random item name (hex of 16 random bytes, as UTF-8) | `wrapped` |
+| `os-systemd-creds` | Linux per-user `systemd-creds` credential (`--user`, name `secretant-os-wrap`); `wrapped` is the credential text `systemd-creds encrypt` printed | `wrapped` |
 
 A reader refuses `kdf` values outside its bounds (so a hostile file cannot demand absurd cost): 1 to 16 lanes, 1 to 20 passes, memory from 8 KiB per lane to 1 GiB.
 
