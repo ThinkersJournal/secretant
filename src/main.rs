@@ -65,7 +65,7 @@ struct Cli {
     /// Read the recovery key from the first line of standard input
     #[arg(long, global = true)]
     recovery_stdin: bool,
-    /// Unlock with the Windows user account
+    /// Unlock with the operating system (Windows account; macOS Keychain or Linux with the `os-keystore` feature)
     #[arg(long, global = true)]
     os: bool,
     /// Take the passphrase from the variable SECRETANT_PASSPHRASE
@@ -124,7 +124,7 @@ enum Cmd {
     Backup { dest: String },
     /// Open BACKUP and decrypt every version; prints counts
     RestoreTest { backup: String },
-    /// Put BACKUP in place of the store (the old file is kept as .prev)
+    /// Put BACKUP in place of the store; needs --replace if a store is already there (the old file is kept as .prev)
     Restore {
         backup: String,
         #[arg(long)]
