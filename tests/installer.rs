@@ -273,7 +273,10 @@ fn the_os_bound_wrap_is_added_when_asked() {
     } else {
         "os-keystore"
     };
-    assert_eq!(r.wraps, ["passphrase", kind, "recovery"]);
+    // Linux without a Secret Service falls back to `systemd-creds`.
+    let ok = r.wraps == ["passphrase", kind, "recovery"]
+        || (cfg!(target_os = "linux") && r.wraps == ["passphrase", "os-systemd-creds", "recovery"]);
+    assert!(ok, "unexpected wraps: {:?}", r.wraps);
 }
 
 #[cfg(not(any(

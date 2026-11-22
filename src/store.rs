@@ -1970,7 +1970,12 @@ mod tests {
             eprintln!("skipped: no OS key store (set SECRETANT_OS_WRAP_REQUIRED=1 to require it)");
             return;
         }
-        assert!(s.wrap_kinds().contains(&os::KIND.to_string()));
+        // Linux without a Secret Service falls back to `systemd-creds`: either kind is the OS wrap.
+        let os_kind = s
+            .wrap_kinds()
+            .into_iter()
+            .find(|k| k.starts_with("os-"))
+            .expect("an OS wrap was added");
         let reopened = FileStore::open_with(&path, Unlock::Os).unwrap();
         assert_eq!(reopened.get("A").unwrap().expose(), b"CANARY-os-wrap-5b1e");
         // The file holds no copy of the value or of the data key in the clear.
@@ -1979,7 +1984,7 @@ mod tests {
         );
         // Negative control: the same file with the wrap pointing at another item must fail.
         let mut image: FileImage = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        for w in image.wraps.iter_mut().filter(|w| w.kind == os::KIND) {
+        for w in image.wraps.iter_mut().filter(|w| w.kind == os_kind) {
             let mut blob = from_hex(&w.wrapped).unwrap();
             blob[0] ^= 0x01;
             w.wrapped = to_hex(&blob);
