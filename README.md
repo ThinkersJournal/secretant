@@ -6,7 +6,7 @@ One place, controlled by its owner, where a person or school keeps their secrets
 program running as the same user: such a program can do what SecretAnt's own read API does. It also has no recovery path of ours: lose every way
 of opening the store and the secrets are gone.
 
-**0.2.1 is breaking relative to 0.1.5** (pre-1.0, so the second number; 0.2.0 was never published): the minimum Rust version rises from 1.88 to 1.95. New since 0.1.5: SecretAnt's own ConfigurAnt schema (`configurant.toml`), and the off-by-default feature `os-keystore`, which lets `Unlock::Os` and `FileStore::add_os_wrap` use the macOS Keychain and the Linux Secret Service as well as Windows DPAPI (`cargo add secretant --features os-keystore`).
+**0.2.x is breaking relative to 0.1.5** (pre-1.0, so the second number; 0.2.0 was never published): the minimum Rust version rises from 1.88 to 1.95. New since 0.1.5: SecretAnt's own ConfigurAnt schema (`configurant.toml`), and the off-by-default feature `os-keystore`, which lets `Unlock::Os` and `FileStore::add_os_wrap` use the macOS Keychain and the Linux Secret Service as well as Windows DPAPI (`cargo add secretant --features os-keystore`). 0.2.2 lets `secretant init --add-os` and `--os` use them; 0.2.3 adds the Linux `systemd-creds` fallback (wrap kind `os-systemd-creds`).
 
 ## Ten lines
 
