@@ -1,5 +1,0 @@
-kind: README and help text match the CLI (claim-to-command audit)
----
-Every command the README and `docs/DESIGN.md` show was run against `target/debug/secretant` built at `287e5ed` (0.2.3): `init`, `put`, `get` (with `--version`), `rotate` (and its refusal of a missing name), `list`, `run` (one and two names; the child sees no `SECRETANT_PASSPHRASE`), `backup`, `restore-test`, `restore` (refused without `--replace`), `doctor` (and `--header-only`), `export`, `import` (dry run, refused conflict, `--conflict replace`), `deliver plan|apply|verify` (including a drifted file), `--os` and `init --add-os` on Windows, wrong passphrase and wrong recovery key, and no-terminal refusals. `cloudflare` was read, not run (no live service). The no-echo prompt and the macOS and Linux paths were read, not run. Fixes: `--os` help said Windows only; `restore` help did not say `--replace` is needed over an existing store; the README's version paragraph described 0.2.1 only and now names 0.2.2 and 0.2.3. The 50-package default tree was re-measured (50, no HTTP or TLS crate; 4 with `cloudflare`).
-
-— lane: secretant
