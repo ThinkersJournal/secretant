@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The approval subject, `NAME -> path`, built and parsed strictly. What the
 //! person approves is this exact text, so it must be unambiguous and shown
-//! whole: the prompt clips a subject at 200 characters, so a name over
-//! [`MAX_NAME_CHARS`] or a path over [`MAX_PATH_CHARS`] (64 + 4 + 120 < 200)
-//! is refused, never clipped; the
+//! whole: `user-request` 0.17 refuses a `SecretPlacement` subject over
+//! [`MAX_SUBJECT_CHARS`] (200) and the prompt clips there, so a name over
+//! [`MAX_NAME_CHARS`] or a whole subject over the cap is refused, never
+//! clipped; the
 //! separator ` -> ` may appear once (a path containing it could forge a second
 //! subject); controls, line breaks and invisible or bidirectional formatting
 //! characters are refused. The path keeps its case exactly.
 
 use std::path::{Path, PathBuf};
 
-/// The most characters a path may have in a subject.
-pub const MAX_PATH_CHARS: usize = 120;
+/// The most characters the whole `NAME -> path` subject may have (user-request 0.17).
+pub const MAX_SUBJECT_CHARS: usize = 200;
 /// The most characters a secret name may have in a subject.
 pub const MAX_NAME_CHARS: usize = 64;
 const SEP: &str = " -> ";
@@ -54,10 +55,11 @@ pub fn format(name: &str, path: &Path) -> Result<String, SubjectError> {
     if p.contains(SEP) {
         return Err(SubjectError::Ambiguous);
     }
-    if p.chars().count() > MAX_PATH_CHARS {
+    let whole = format!("{name}{SEP}{p}");
+    if whole.chars().count() > MAX_SUBJECT_CHARS {
         return Err(SubjectError::TooLong);
     }
-    Ok(format!("{name}{SEP}{p}"))
+    Ok(whole)
 }
 
 /// Parse a subject back: the exact inverse of [`format()`](fn@format).

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The Windows Hello approver: a [`PlacementApprover`] that asks the person
-//! through `user-request`'s Secret kind. Three things to know.
+//! through `user-request`'s SecretPlacement kind. Three things to know.
 //!
 //! - **Who is asking** comes from `with-secret`'s `identity::resolve` over the
 //!   OS process table, never from an argument or a hand-built value. If the
@@ -11,10 +11,9 @@
 //! - **What is shown** is the subject `NAME -> path` ([`crate::subject`]),
 //!   whole (the prompt clips at 200 characters and the subject cannot exceed
 //!   it) and nothing else about the secret.
-//! - **The grant** is the shortest the Secret kind allows that can still be
-//!   answered: `OneUse` is not available to it, so it is 120 seconds with a 60
-//!   second wait. The approval is used at once and not stored by the face. A
-//!   `KindId::SecretPlacement` (user-request 0.17.0) will replace this.
+//! - **The grant** is `Grant::OneUse` on `KindId::SecretPlacement`
+//!   (user-request 0.17): one placement, this requester, spent on use. The
+//!   approval is not stored by the face.
 
 use crate::{Decision, PlacementApprover, PlacementRequest};
 use lane_state::facts::{SysinfoFacts, SystemFacts};
@@ -24,10 +23,8 @@ use user_request::consent::Consent;
 use user_request::{Grant, KindId, Request, Requester};
 use with_secret::identity;
 
-/// How long the person has to answer.
+/// How long the person has to answer a prompt before it counts as timed out.
 pub const WAIT_SECS: u64 = 60;
-/// The grant shown: the shortest the Secret kind allows that outlives the wait.
-pub const GRANT_SECS: i64 = 120;
 
 /// Asks through `user-request`. `C` is the consent channel (the real Hello one,
 /// or a fake in tests); a fresh one is made per ask.
@@ -73,14 +70,14 @@ impl<C: Consent + 'static> PlacementApprover for HelloApprover<C> {
             return Decision::Denied;
         };
         let request = Request {
-            kind: KindId::Secret,
+            kind: KindId::SecretPlacement,
             subject: req.subject.clone(),
             summary: "place a secret in a file".to_string(),
             requester: who.clone(),
             reason: format!("an agent in role {} asked for this placement", req.role),
             allowed_lanes: None,
         };
-        let grant = Grant::For { secs: GRANT_SECS };
+        let grant = Grant::OneUse;
         let channel = HelloChannel::new((self.consent)());
         match channel.present(&request, &grant, std::time::Duration::from_secs(WAIT_SECS)) {
             Outcome::Approved(_) => Decision::Approved,

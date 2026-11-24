@@ -1748,9 +1748,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "user-request"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c97ffca774a14fb77232e880ed2552f4dc226ab167ce70ed59a2c001b13402c3"
+checksum = "8fd41b539784b41f44c1220e7e4187fc62d464bd2a1a094f476bb25eea470a1e"
 dependencies = [
  "chacha20poly1305",
  "chrono",
@@ -2077,9 +2077,9 @@ dependencies = [
 
 [[package]]
 name = "with-secret"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b09f13cc787f4558c4178803a7f42a3b1984a012612cadb31445b5a4ac17a9ee"
+checksum = "afe3470eb086044e1c7d39fb0e88fee752d1273c4bdaa79a02e19be0ad48995a"
 dependencies = [
  "chrono",
  "getrandom 0.4.3",

@@ -78,7 +78,8 @@ fn answers_map_and_the_whole_subject_is_shown() {
         ),
     ] {
         let (a, shown) = approver(Ok(who()), answer);
-        let path = format!("C:/safe/{}", "d".repeat(100));
+        // 0.17's strict rule: /x/y, or X:\x\y with backslashes only.
+        let path = format!(r"C:\safe\{}", "d".repeat(100));
         assert_eq!(a.approve(&req("proj_db", &path)), want);
         let text = shown.lock().unwrap().join("\n");
         assert!(
