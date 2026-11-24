@@ -43,6 +43,13 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// The named stand-in for `permission-policy`, which has no provider yet: the
+/// host config's role, its name-prefix scope and the allow-list, checked on
+/// every call. It is written on every record line so a later policy provider
+/// can be told apart from it. The PR names it too.
+pub const INTERIM_GATE: &str =
+    "host-config-role-prefix-scope+allow-list (stand-in for permission-policy)";
+
 /// A directory the face may place files in.
 #[derive(Debug, Clone)]
 pub struct AllowRoot {
@@ -249,7 +256,7 @@ impl Face {
         let at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
-        let line = json!({"at": at, "role": self.cfg.role, "tool": tool,
+        let line = json!({"at": at, "role": self.cfg.role, "gate": INTERIM_GATE, "tool": tool,
             "name": name, "target": target, "outcome": outcome});
         let mut f = fs::OpenOptions::new()
             .create(true)
