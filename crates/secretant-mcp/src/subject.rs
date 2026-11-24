@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The approval subject, `NAME -> path`, built and parsed strictly. What the
 //! person approves is this exact text, so it must be unambiguous and shown
-//! whole: a path over [`MAX_PATH_CHARS`] is refused, never clipped; the
+//! whole: the prompt clips a subject at 200 characters, so a name over
+//! [`MAX_NAME_CHARS`] or a path over [`MAX_PATH_CHARS`] (64 + 4 + 120 < 200)
+//! is refused, never clipped; the
 //! separator ` -> ` may appear once (a path containing it could forge a second
 //! subject); controls, line breaks and invisible or bidirectional formatting
 //! characters are refused. The path keeps its case exactly.
@@ -9,9 +11,9 @@
 use std::path::{Path, PathBuf};
 
 /// The most characters a path may have in a subject.
-pub const MAX_PATH_CHARS: usize = 240;
+pub const MAX_PATH_CHARS: usize = 120;
 /// The most characters a secret name may have in a subject.
-pub const MAX_NAME_CHARS: usize = 128;
+pub const MAX_NAME_CHARS: usize = 64;
 const SEP: &str = " -> ";
 
 /// Why a subject was refused.

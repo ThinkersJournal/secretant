@@ -5,12 +5,13 @@
 //! directories. The store is opened with the OS unlock: no passphrase is read
 //! from an argument, the environment or the config.
 //!
-//! Until the Windows Hello approver is wired, every `deliver` is refused
-//! (`denied`); list, ledger and verify work.
+//! Built without feature `hello`, every `deliver` is refused (`denied`); list,
+//! ledger and verify work. With it, each placement asks the person through
+//! Windows Hello, and a process the OS table cannot place is denied.
 
 use secretant::{FileStore, Store, Unlock};
 use secretant_mcp::serve::FaceServer;
-use secretant_mcp::{AllowRoot, DenyAll, Face, HostConfig};
+use secretant_mcp::{AllowRoot, Face, HostConfig, PlacementApprover};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -31,6 +32,16 @@ struct Host {
     ledger: PathBuf,
     record: PathBuf,
     roots: Vec<Root>,
+}
+
+/// Windows Hello when built with `hello`; otherwise every delivery is refused.
+#[cfg(feature = "hello")]
+fn approver() -> Box<dyn PlacementApprover> {
+    Box::new(secretant_mcp::hello::platform())
+}
+#[cfg(not(feature = "hello"))]
+fn approver() -> Box<dyn PlacementApprover> {
+    Box::new(secretant_mcp::DenyAll)
 }
 
 fn main() -> std::process::ExitCode {
@@ -75,7 +86,7 @@ fn main() -> std::process::ExitCode {
         Box::new(move || {
             FileStore::open_with(&store, Unlock::Os).map(|s| Box::new(s) as Box<dyn Store>)
         }),
-        Box::new(DenyAll),
+        approver(),
     );
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()

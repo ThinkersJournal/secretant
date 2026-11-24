@@ -29,6 +29,8 @@
 //! - A granted approval is for one placement per path per call; the
 //!   [`PlacementApprover`] decides what the person is shown.
 
+#[cfg(feature = "hello")]
+pub mod hello;
 #[cfg(feature = "stdio")]
 pub mod serve;
 pub mod subject;
