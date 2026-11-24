@@ -112,7 +112,7 @@ pub struct PlacementRequest {
     pub path: PathBuf,
     /// The variable, for an environment file.
     pub var: Option<String>,
-    /// `NAME -> path`, built by [`subject::format`]: exactly what the person
+    /// `NAME -> path`, built by [`subject::format`](fn@subject::format): exactly what the person
     /// is asked to approve, whole.
     pub subject: String,
 }
