@@ -29,6 +29,9 @@
 //! - A granted approval is for one placement per path per call; the
 //!   [`PlacementApprover`] decides what the person is shown.
 
+#[cfg(feature = "stdio")]
+pub mod serve;
+
 use secretant::{DeliverError, Ledger, Placement, State, Store, StoreError, Target};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
