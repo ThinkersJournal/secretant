@@ -458,9 +458,26 @@ impl Face {
             return Err(ToolError::PathNotAllowed);
         }
         let full = parent.join(file);
+        // Exact case: what was typed must be the canonical path, character for
+        // character (only the separator may differ on Windows). A different
+        // case, an 8.3 short name or a doubled separator is a different path.
+        let typed = if cfg!(windows) {
+            raw.replace('/', "\\")
+        } else {
+            raw.to_string()
+        };
+        if full.to_string_lossy() != typed {
+            return Err(ToolError::BadPath);
+        }
         match fs::symlink_metadata(&full) {
             Ok(m) if m.file_type().is_symlink() || m.is_dir() => Err(ToolError::PathNotAllowed),
-            Ok(_) => Ok(full),
+            Ok(_) => {
+                // The file's on-disk name must match too (case-folding file systems).
+                match fs::canonicalize(&full).map(plain) {
+                    Ok(real) if real == full => Ok(full),
+                    _ => Err(ToolError::BadPath),
+                }
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(full),
             Err(_) => Err(ToolError::Io),
         }
