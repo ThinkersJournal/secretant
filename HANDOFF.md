@@ -33,3 +33,6 @@ CireSnave 2026-11-24, verbatim: "498: A." You OWN the agent-facing vault tool fa
 
 ## DONE 2026-11-24 f2e3c7c (pushed): SecretPlacement swap
 user-request/with-secret 0.17 (crates.io), KindId::SecretPlacement + Grant::OneUse, subject cap = whole subject 200 (red first), README updated; gates green. The 60 s answer window (WAIT_SECS) stays: present() requires a wait. Still fake-tested only. WAIT 2 (swap) is therefore DONE.
+
+## WAIT (pm-ants TASK 19:4xZ)
+Open the vault-tool PR from lane/secretant-d7 at 2026-11-25T00:00Z or later (check: gh pr list -R ThinkersJournal/secretant); pm-ants wakes ~00:12Z. Suspended with lane-restart stop --soft.
