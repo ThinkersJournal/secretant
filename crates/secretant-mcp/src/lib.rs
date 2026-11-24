@@ -31,6 +31,7 @@
 
 #[cfg(feature = "stdio")]
 pub mod serve;
+pub mod subject;
 
 use secretant::{DeliverError, Ledger, Placement, State, Store, StoreError, Target};
 use serde::{Deserialize, Serialize};
@@ -104,6 +105,9 @@ pub struct PlacementRequest {
     pub path: PathBuf,
     /// The variable, for an environment file.
     pub var: Option<String>,
+    /// `NAME -> path`, built by [`subject::format`]: exactly what the person
+    /// is asked to approve, whole.
+    pub subject: String,
 }
 
 /// A person's answer.
@@ -319,11 +323,17 @@ impl Face {
                 }
             };
             let path = target_path(&p).to_path_buf();
+            let Ok(subject) = subject::format(&a.name, &path) else {
+                self.record("deliver", &a.name, &a.path, word(ToolError::BadPath))?;
+                out.push(status(a, word(ToolError::BadPath), None));
+                continue;
+            };
             let req = PlacementRequest {
                 role: self.cfg.role.clone(),
                 name: a.name.clone(),
                 path: path.clone(),
                 var: a.var.clone(),
+                subject,
             };
             // Record the request before asking: a record that cannot be
             // written stops the call before anything is shown or done.
