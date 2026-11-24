@@ -58,7 +58,7 @@ pub fn format(name: &str, path: &Path) -> Result<String, SubjectError> {
     Ok(format!("{name}{SEP}{p}"))
 }
 
-/// Parse a subject back: the exact inverse of [`format`].
+/// Parse a subject back: the exact inverse of [`format()`](fn@format).
 pub fn parse(text: &str) -> Result<(String, PathBuf), SubjectError> {
     let (name, path) = text.split_once(SEP).ok_or(SubjectError::Forbidden)?;
     if path.contains(SEP) {
