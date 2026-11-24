@@ -1011,6 +1011,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "secretant-mcp"
+version = "0.2.4"
+dependencies = [
+ "log",
+ "secretant",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

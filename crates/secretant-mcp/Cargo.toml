@@ -1,0 +1,20 @@
+[package]
+name = "secretant-mcp"
+version = "0.2.4"
+edition = "2024"
+description = "The agent-facing face of SecretAnt: list names, read the placement ledger, verify and deliver secrets to approved files. No tool ever returns a value."
+keywords = ["secrets", "mcp", "agents", "vault"]
+categories = ["cryptography", "authentication"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ThinkersJournal/secretant"
+rust-version = "1.95"
+publish = false
+
+[dependencies]
+secretant = { version = "0.2.4", path = "../.." }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+log = "0.4.35"
+tempfile = "3.27.0"

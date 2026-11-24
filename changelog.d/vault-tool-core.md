@@ -1,0 +1,3 @@
+kind: Added
+---
+`Ledger::entries()`: read what was placed where (names, target descriptions, version numbers; never a value). New workspace member `secretant-mcp`: the agent-facing vault tool's core (list names, read the placement ledger, verify and deliver placements behind a per-path approval, an allow-list, a role prefix scope and its own who-asked-what record). No tool returns a value; `tests/no_value.rs` drives every tool and error path with a canary and fails if the canary or its base64, hex or URL forms reach a response, a log line or the record. The MCP transport is not in this change.

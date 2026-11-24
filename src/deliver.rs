@@ -160,6 +160,17 @@ impl Ledger {
         Ok(Ledger { path, file })
     }
 
+    /// Every placement recorded: `(name, target, version)`. Names, target
+    /// descriptions (`file:<path>` or `env:<path>#<VAR>`) and numbers only.
+    #[must_use]
+    pub fn entries(&self) -> Vec<(String, String, u32)> {
+        self.file
+            .placed
+            .iter()
+            .map(|r| (r.name.clone(), r.target.clone(), r.version))
+            .collect()
+    }
+
     fn version(&self, p: &Placement) -> Option<u32> {
         self.version_by(&p.name, &p.target.key())
     }
