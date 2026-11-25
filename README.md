@@ -60,6 +60,7 @@ secretant --passphrase-env run API_TOKEN -- my-program   # the value is in the p
 - Backup, restore, `doctor`, export and import bundles; delivery plan, apply and verify to files and environment files with a ledger of what was placed where.
 - The installer step library (`secretant::installer`, `secrets_step`, `place_step`): pre-1.0, **may change in any 0.x release**.
 - Cloudflare Worker delivery (feature `cloudflare`): **tested against a fake of Cloudflare's documented API only; it has not been run against the live service yet.**
+- `secretant-mcp` (workspace member `crates/secretant-mcp`, not published): an agent-facing MCP face (stdio, feature `stdio`) with four tools: list names, read the placement ledger, verify a placement, deliver to an approved file. **No tool returns a value**; a test drives every tool and error path with a canary and fails if it reaches a response, a log or the face's own record. `permission-policy` has no provider yet, so the gate is a stand-in: the host config's role, name prefixes and allow-listed directories. **Delivery asks a person per path through a `PlacementApprover`. The Windows Hello one (feature `hello`, `user-request` 0.17's `SecretPlacement` kind, one use per path, requester identity from `with-secret`) is tested with a fake consent channel only and has not been run against a real Hello prompt; the binary built without `hello` refuses every `deliver`.** Design: `docs/DESIGN-VAULT-TOOL.md`.
 
 ## What it does not do
 
