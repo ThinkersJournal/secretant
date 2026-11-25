@@ -10,7 +10,7 @@ Rewritten 2026-11-25 by the lane. Current state only; history is in git.
 - Remote lane/secretant (old, fcbd0a5) is audited safe-to-delete; delete was denied by the classifier: needs the user. Do not delete it yourself.
 
 ## WAIT
-None.
+1. Pin line (SHA 467fd259d6d062cba4c5683d310f1a6f2b66e763) goes in the next day PR (2026-11-26); the pin-queue wave mails the lane. TASK from pm-ants: soft-stopped, no row left; do not restart yourself.
 
 ## Next rows
 No unblocked ROADMAP row. Candidates: a "wiped on drop" test; run_with_secret design note (to pm-ants first, not code). If neither is claimed, `lane-restart stop --self --soft --reason "no work"`.
