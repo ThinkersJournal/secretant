@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.6] — CI: portfolio workflow pinned to coderipper 0.48.1
+
+The advisory `portfolio` job in `.github/workflows/ci.yml` calls `ciresnave/coderipper/.github/workflows/portfolio.yml` at `467fd259d6d062cba4c5683d310f1a6f2b66e763` (coderipper 0.48.1). CI only; not breaking.
+
 ## [0.2.5] — Added
 
 `Ledger::entries()`: read what was placed where (names, target descriptions, version numbers; never a value). New workspace member `secretant-mcp`: the agent-facing vault tool's core (list names, read the placement ledger, verify and deliver placements behind a per-path approval, an allow-list, a role prefix scope and its own who-asked-what record). No tool returns a value; `tests/no_value.rs` drives every tool and error path with a canary and fails if the canary or its base64, hex or URL forms reach a response, a log line or the record. The MCP transport is not in this change. The MCP stdio shim (`serve`, feature `stdio`, rmcp 3.11 pinned, one file) was planned on mcpant's backend feature; crates.io has only the 0.0.0 placeholder, so rmcp is used directly and the swap stays one file. `tests/wire.rs` drives the real server with well-formed and malformed JSON-RPC and finds no stored value in any byte it writes (rmcp repeats an unknown method name in its own method-not-found error; that client-typed text is the one allowed echo).

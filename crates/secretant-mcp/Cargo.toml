@@ -1,6 +1,6 @@
 [package]
 name = "secretant-mcp"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2024"
 description = "The agent-facing face of SecretAnt: list names, read the placement ledger, verify and deliver secrets to approved files. No tool ever returns a value."
 keywords = ["secrets", "mcp", "agents", "vault"]
@@ -17,7 +17,7 @@ stdio = ["dep:rmcp", "dep:tokio"]
 hello = ["dep:with-secret", "dep:user-request", "dep:lane-state"]
 
 [dependencies]
-secretant = { version = "0.2.5", path = "../.." }
+secretant = { version = "0.2.6", path = "../.." }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 rmcp = { version = "=3.11.0", optional = true, default-features = false, features = ["server"] }
